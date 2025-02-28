@@ -52,15 +52,27 @@ export async function GET(request) {
               }`
             )
 
+            // Define cookie options with secure attributes
             const cookieOptions = {
               ...options,
-              secure: process.env.NODE_ENV === "production",
-              sameSite: "lax",
+              // Set a long max age for persistent cookies (7 days)
+              maxAge: 60 * 60 * 24 * 7,
+              // Ensure cookies are accessible across the site
               path: "/",
-              // Set a long max age for persistent cookies
-              maxAge: 60 * 60 * 24 * 7, // 7 days
+              // Use lax same-site policy to balance security and functionality
+              sameSite: "lax",
+              // Use secure cookies in production
+              secure: process.env.NODE_ENV === "production",
+              // Make sure cookies are accessible via JavaScript
+              httpOnly: false,
             }
 
+            console.log(
+              `[Auth Callback] Cookie options:`,
+              JSON.stringify(cookieOptions)
+            )
+
+            // Set the cookie in both the cookie store and the response
             cookieStore.set(name, value, cookieOptions)
             response.cookies.set(name, value, cookieOptions)
 

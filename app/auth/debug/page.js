@@ -2,252 +2,279 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/app/lib/supabase"
-import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function AuthDebug() {
-  const [sessionInfo, setSessionInfo] = useState(null)
+export default function AuthDebugPage() {
+  const [supabase] = useState(() => createClient())
+  const [session, setSession] = useState(null)
+  const [user, setUser] = useState(null)
   const [cookies, setCookies] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
-  const [supabase] = useState(() => createClient())
 
   useEffect(() => {
-    async function checkAuth() {
-      try {
-        setLoading(true)
-
-        // Get session
-        const { data, error } = await supabase.auth.getSession()
-
-        if (error) {
-          throw error
-        }
-
-        // Format session data for display
-        const session = data.session
-        let formattedSession = null
-
-        if (session) {
-          formattedSession = {
-            user: {
-              id: session.user.id,
-              email: session.user.email,
-              created_at: new Date(session.user.created_at).toLocaleString(),
-            },
-            expires_at: new Date(session.expires_at * 1000).toLocaleString(),
-            expires_in:
-              Math.floor((session.expires_at * 1000 - Date.now()) / 1000 / 60) +
-              " minutes",
-            created_at: new Date(session.created_at * 1000).toLocaleString(),
-          }
-        }
-
-        setSessionInfo(formattedSession)
-
-        // Get cookies
-        const cookieList = document.cookie.split(";").map(cookie => {
-          const [name, value] = cookie.trim().split("=")
-          return {
-            name,
-            exists: !!value,
-            // Don't show actual values for security
-            length: value ? value.length : 0,
-          }
-        })
-
-        setCookies(cookieList)
-      } catch (err) {
-        console.error("Error checking auth:", err)
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     checkAuth()
-  }, [supabase])
+    parseCookies()
+  }, [])
 
-  const refreshSession = async () => {
+  async function checkAuth() {
+    setLoading(true)
+    setError(null)
+
     try {
-      setLoading(true)
-      const { data, error } = await supabase.auth.refreshSession()
+      // Get session
+      const { data: sessionData } = await supabase.auth.getSession()
+      setSession(sessionData.session)
 
-      if (error) {
-        throw error
-      }
-
-      window.location.reload()
+      // Get user
+      const { data: userData } = await supabase.auth.getUser()
+      setUser(userData.user)
     } catch (err) {
-      console.error("Error refreshing session:", err)
+      console.error("Error checking auth:", err)
       setError(err.message)
+    } finally {
       setLoading(false)
     }
   }
 
+  function parseCookies() {
+    const cookieList = []
+    if (typeof document !== "undefined") {
+      const cookies = document.cookie.split(";")
+      for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split("=")
+        cookieList.push({ name, value })
+      }
+    }
+    setCookies(cookieList)
+  }
+
+  async function refreshSession() {
+    setRefreshing(true)
+    setError(null)
+
+    try {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error) {
+        throw error
+      }
+      setSession(data.session)
+      setUser(data.user)
+      parseCookies()
+      console.log("Session refreshed successfully")
+    } catch (err) {
+      console.error("Error refreshing session:", err)
+      setError(err.message)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  async function signOut() {
+    try {
+      await supabase.auth.signOut()
+      setSession(null)
+      setUser(null)
+      parseCookies()
+    } catch (err) {
+      console.error("Error signing out:", err)
+      setError(err.message)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">
-          Authentication Debug
-        </h1>
+    <div className="container mx-auto py-8 px-4">
+      <h1 className="text-3xl font-bold mb-6">Authentication Debug Page</h1>
 
-        {loading ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
-            <p className="text-gray-600 dark:text-gray-300">
-              Loading authentication data...
-            </p>
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg border border-red-200 dark:border-red-800 mb-6">
-            <h2 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-2">
-              Error
-            </h2>
-            <p className="text-red-600 dark:text-red-400">{error}</p>
-          </div>
-        ) : (
-          <>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md mb-6">
-              <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">
-                Session Status
-              </h2>
-
-              {sessionInfo ? (
-                <div className="space-y-4">
-                  <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-md border border-green-200 dark:border-green-800">
-                    <p className="text-green-700 dark:text-green-300 font-medium">
-                      ✅ You are authenticated
-                    </p>
-                  </div>
-
-                  <div>
-                    <h3 className="text-md font-medium mb-2 text-gray-700 dark:text-gray-300">
-                      User Info
-                    </h3>
-                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md">
-                      <p className="mb-1">
-                        <span className="font-medium">Email:</span>{" "}
-                        {sessionInfo.user.email}
-                      </p>
-                      <p className="mb-1">
-                        <span className="font-medium">User ID:</span>{" "}
-                        {sessionInfo.user.id}
-                      </p>
-                      <p>
-                        <span className="font-medium">Created:</span>{" "}
-                        {sessionInfo.user.created_at}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-md font-medium mb-2 text-gray-700 dark:text-gray-300">
-                      Session Info
-                    </h3>
-                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md">
-                      <p className="mb-1">
-                        <span className="font-medium">Expires at:</span>{" "}
-                        {sessionInfo.expires_at}
-                      </p>
-                      <p className="mb-1">
-                        <span className="font-medium">Expires in:</span>{" "}
-                        {sessionInfo.expires_in}
-                      </p>
-                      <p>
-                        <span className="font-medium">Created at:</span>{" "}
-                        {sessionInfo.created_at}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={refreshSession}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors">
-                    Refresh Session
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-md border border-yellow-200 dark:border-yellow-800">
-                  <p className="text-yellow-700 dark:text-yellow-300 font-medium">
-                    ⚠️ You are not authenticated
-                  </p>
-                  <p className="text-yellow-600 dark:text-yellow-400 mt-2">
-                    <Link href="/auth/signin" className="underline">
-                      Sign in
-                    </Link>{" "}
-                    to access protected routes.
-                  </p>
-                </div>
-              )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Authentication Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4">
+              <p className="font-semibold">Status:</p>
+              <p
+                className={`text-lg ${
+                  user ? "text-green-600" : "text-red-600"
+                }`}>
+                {loading
+                  ? "Checking..."
+                  : user
+                  ? "Authenticated"
+                  : "Not Authenticated"}
+              </p>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
-              <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">
-                Cookies
-              </h2>
+            <div className="flex space-x-2">
+              <Button onClick={checkAuth} disabled={loading} variant="outline">
+                Refresh Status
+              </Button>
 
-              {cookies.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Name
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Length
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {cookies.map((cookie, index) => (
-                        <tr key={index}>
-                          <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {cookie.name}
-                          </td>
-                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                            {cookie.exists ? (
-                              <span className="text-green-600 dark:text-green-400">
-                                Present
-                              </span>
-                            ) : (
-                              <span className="text-red-600 dark:text-red-400">
-                                Empty
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                            {cookie.length}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-gray-600 dark:text-gray-400">
-                  No cookies found
+              <Button
+                onClick={refreshSession}
+                disabled={refreshing || !session}
+                variant="outline">
+                Refresh Session
+              </Button>
+
+              <Button onClick={signOut} disabled={!user} variant="destructive">
+                Sign Out
+              </Button>
+            </div>
+
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 text-red-800 rounded">
+                <p className="font-semibold">Error:</p>
+                <p>{error}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>User Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p>Loading...</p>
+            ) : user ? (
+              <div>
+                <p>
+                  <span className="font-semibold">ID:</span> {user.id}
                 </p>
-              )}
-            </div>
+                <p>
+                  <span className="font-semibold">Email:</span> {user.email}
+                </p>
+                <p>
+                  <span className="font-semibold">Created:</span>{" "}
+                  {new Date(user.created_at).toLocaleString()}
+                </p>
+                <p>
+                  <span className="font-semibold">Last Sign In:</span>{" "}
+                  {user.last_sign_in_at
+                    ? new Date(user.last_sign_in_at).toLocaleString()
+                    : "N/A"}
+                </p>
+              </div>
+            ) : (
+              <p>No user authenticated</p>
+            )}
+          </CardContent>
+        </Card>
 
-            <div className="mt-6 flex space-x-4">
-              <Link
-                href="/dashboard"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors">
-                Go to Dashboard
-              </Link>
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Session Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p>Loading...</p>
+            ) : session ? (
+              <div>
+                <p>
+                  <span className="font-semibold">Session ID:</span>{" "}
+                  {session.id}
+                </p>
+                <p>
+                  <span className="font-semibold">Expires:</span>{" "}
+                  {new Date(session.expires_at * 1000).toLocaleString()}
+                  {session.expires_at && (
+                    <span
+                      className={`ml-2 ${
+                        Date.now() > session.expires_at * 1000
+                          ? "text-red-600"
+                          : "text-green-600"
+                      }`}>
+                      (
+                      {Date.now() > session.expires_at * 1000
+                        ? "Expired"
+                        : "Valid"}
+                      )
+                    </span>
+                  )}
+                </p>
+                <p>
+                  <span className="font-semibold">Created:</span>{" "}
+                  {new Date(session.created_at * 1000).toLocaleString()}
+                </p>
 
-              <Link
-                href="/"
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md transition-colors">
-                Go to Home
-              </Link>
-            </div>
-          </>
-        )}
+                <div className="mt-4">
+                  <p className="font-semibold">Access Token:</p>
+                  <div className="bg-gray-100 p-2 rounded overflow-x-auto">
+                    <code className="text-xs break-all">
+                      {session.access_token}
+                    </code>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="font-semibold">Refresh Token:</p>
+                  <div className="bg-gray-100 p-2 rounded overflow-x-auto">
+                    <code className="text-xs break-all">
+                      {session.refresh_token}
+                    </code>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p>No active session</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Cookies</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cookies.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2">Name</th>
+                      <th className="text-left py-2">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cookies.map((cookie, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="py-2 pr-4 font-medium">{cookie.name}</td>
+                        <td className="py-2 break-all">
+                          <code className="text-xs">{cookie.value}</code>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>No cookies found</p>
+            )}
+
+            <Button onClick={parseCookies} variant="outline" className="mt-4">
+              Refresh Cookies
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="text-xl font-bold mb-4">Troubleshooting Steps</h2>
+        <ol className="list-decimal pl-6 space-y-2">
+          <li>Check if you are authenticated (see Authentication Status)</li>
+          <li>Verify your session is valid and not expired</li>
+          <li>Ensure the necessary cookies are present (especially sb-*)</li>
+          <li>
+            Try refreshing your session using the "Refresh Session" button
+          </li>
+          <li>If issues persist, try signing out and signing in again</li>
+          <li>Check browser console for any errors</li>
+        </ol>
       </div>
     </div>
   )

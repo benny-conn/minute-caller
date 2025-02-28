@@ -159,8 +159,26 @@ export const getCurrentUser = async () => {
     }
   }
 
-  const { data, error } = await supabase.auth.getUser()
-  return { user: data?.user, error }
+  try {
+    console.log("[Auth] Getting current user with supabase.auth.getUser()")
+    const { data, error } = await supabase.auth.getUser()
+
+    if (error) {
+      console.error("[Auth] Error getting user:", error.message)
+      return { user: null, error }
+    }
+
+    if (!data?.user) {
+      console.log("[Auth] No user found in getUser response")
+      return { user: null, error: new Error("No user found") }
+    }
+
+    console.log("[Auth] User retrieved successfully:", data.user.email)
+    return { user: data.user, error: null }
+  } catch (e) {
+    console.error("[Auth] Exception in getCurrentUser:", e)
+    return { user: null, error: e }
+  }
 }
 
 // Credit management functions

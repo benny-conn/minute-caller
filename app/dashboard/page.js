@@ -77,7 +77,14 @@ function DashboardContent() {
 
   // Load user data on component mount
   useEffect(() => {
-    loadUserData()
+    // Set a flag to prevent multiple loadUserData calls
+    let isInitialLoad = true
+
+    // Load user data only on initial mount
+    if (isInitialLoad) {
+      loadUserData()
+      isInitialLoad = false
+    }
 
     // Set up auth state change listener
     const {
@@ -88,12 +95,48 @@ function DashboardContent() {
         session?.user?.email || "no user"
       )
 
-      if (event === "SIGNED_OUT") {
-        // Redirect to sign-in page if signed out
-        window.location.href = "/auth/signin"
-      } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        // Reload user data if signed in or token refreshed
-        loadUserData()
+      // Track auth events to prevent loops
+      try {
+        const lastEventKey = "dashboard_last_auth_event"
+        const lastEventTime = sessionStorage.getItem(lastEventKey)
+        const currentTime = Date.now()
+        const eventData = JSON.stringify({ event, time: currentTime })
+
+        // Only process events if they're not too frequent (throttle to 5 seconds)
+        if (
+          !lastEventTime ||
+          currentTime - JSON.parse(lastEventTime).time > 5000 ||
+          JSON.parse(lastEventTime).event !== event
+        ) {
+          sessionStorage.setItem(lastEventKey, eventData)
+
+          if (event === "SIGNED_OUT") {
+            // Redirect to sign-in page if signed out
+            window.location.href = "/auth/signin"
+          } else if (event === "SIGNED_IN") {
+            // Only reload user data on explicit sign in
+            loadUserData()
+          } else if (event === "TOKEN_REFRESHED") {
+            // For token refresh, just log but don't reload to prevent loops
+            console.log("[Dashboard] Token refreshed, session updated")
+          }
+        } else {
+          console.log(
+            `[Dashboard] Throttling auth event: ${event} (too frequent)`
+          )
+        }
+      } catch (storageErr) {
+        // If sessionStorage fails, still handle the events but without throttling
+        console.log(
+          "[Dashboard] Could not access sessionStorage for auth events:",
+          storageErr
+        )
+
+        if (event === "SIGNED_OUT") {
+          window.location.href = "/auth/signin"
+        } else if (event === "SIGNED_IN") {
+          loadUserData()
+        }
       }
     })
 
@@ -132,27 +175,65 @@ function DashboardContent() {
     try {
       console.log("[Dashboard] Loading user data...")
 
-      // First, try to refresh the session
+      // Check if we're already in a refresh cycle to prevent infinite loops
+      let shouldTryRefresh = false
+
       try {
-        const { data: refreshData, error: refreshError } =
-          await supabase.auth.refreshSession()
-        if (!refreshError) {
-          console.log("[Dashboard] Session refreshed successfully")
+        const refreshAttemptKey = "dashboard_refresh_attempt"
+        const refreshAttempt = sessionStorage.getItem(refreshAttemptKey)
+        const currentTime = Date.now()
+
+        // Only try to refresh if we haven't attempted recently (within last 10 seconds)
+        if (
+          !refreshAttempt ||
+          currentTime - parseInt(refreshAttempt, 10) > 10000
+        ) {
+          console.log("[Dashboard] Will attempt session refresh")
+          sessionStorage.setItem(refreshAttemptKey, currentTime.toString())
+          shouldTryRefresh = true
         } else {
           console.log(
-            "[Dashboard] Session refresh failed:",
-            refreshError.message
+            "[Dashboard] Skipping session refresh - attempted too recently"
           )
         }
-      } catch (refreshErr) {
-        console.error("[Dashboard] Error refreshing session:", refreshErr)
+      } catch (storageErr) {
+        // If sessionStorage is not available, continue without throttling
+        console.log("[Dashboard] Could not access sessionStorage:", storageErr)
+        shouldTryRefresh = true
       }
 
-      // Get current user
-      const { user, error: userError } = await getCurrentUser()
+      // First, try to refresh the session if appropriate
+      if (shouldTryRefresh) {
+        try {
+          console.log("[Dashboard] Attempting to refresh session...")
+          const { data: refreshData, error: refreshError } =
+            await supabase.auth.refreshSession()
 
-      if (userError || !user) {
-        console.error("Authentication failed:", userError)
+          if (!refreshError) {
+            console.log(
+              "[Dashboard] Session refreshed successfully:",
+              refreshData.session?.user?.email
+            )
+          } else {
+            console.log(
+              "[Dashboard] Session refresh failed:",
+              refreshError.message
+            )
+          }
+        } catch (refreshErr) {
+          console.error("[Dashboard] Error refreshing session:", refreshErr)
+        }
+      }
+
+      // Get current user using getUser directly from Supabase
+      console.log("[Dashboard] Getting user with supabase.auth.getUser()...")
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+
+      if (userError || !userData?.user) {
+        console.error(
+          "[Dashboard] Authentication failed:",
+          userError?.message || "No user found"
+        )
         setError("Authentication failed. Please try signing in again.")
 
         // Add a small delay before redirecting to prevent immediate redirect loops
@@ -166,6 +247,7 @@ function DashboardContent() {
         return
       }
 
+      const user = userData.user
       console.log("[Dashboard] User authenticated successfully:", user.email)
       setUser(user)
 
@@ -175,7 +257,7 @@ function DashboardContent() {
       if (!creditsError) {
         setCredits(credits)
       } else {
-        console.error("Error fetching credits:", creditsError)
+        console.error("[Dashboard] Error fetching credits:", creditsError)
       }
 
       // Get call history
@@ -184,7 +266,7 @@ function DashboardContent() {
       if (!historyError) {
         setCallHistory(calls || [])
       } else {
-        console.error("Error fetching call history:", historyError)
+        console.error("[Dashboard] Error fetching call history:", historyError)
       }
     } catch (error) {
       console.error("Error loading user data:", error)

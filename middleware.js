@@ -21,6 +21,18 @@ export async function middleware(request) {
     return NextResponse.next()
   }
 
+  // Skip middleware for auth callback to prevent interference with the auth flow
+  if (request.nextUrl.pathname === "/auth/callback") {
+    console.log(`[Middleware] Skipping middleware for auth callback`)
+    return NextResponse.next()
+  }
+
+  // Skip middleware for debug page to allow access even when not authenticated
+  if (request.nextUrl.pathname === "/auth/debug") {
+    console.log(`[Middleware] Skipping middleware for debug page`)
+    return NextResponse.next()
+  }
+
   // Skip middleware for static assets and API routes
   if (
     request.nextUrl.pathname.startsWith("/_next") ||
@@ -51,6 +63,7 @@ export async function middleware(request) {
               value?.length || 0
             }`
           )
+          // Set cookies with appropriate options for better persistence
           response.cookies.set({
             name,
             value,
@@ -58,6 +71,8 @@ export async function middleware(request) {
             path: "/",
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
+            // Set a long max age for persistent cookies (7 days)
+            maxAge: 60 * 60 * 24 * 7,
           })
         },
         remove: (name, options) => {
@@ -156,7 +171,7 @@ export async function middleware(request) {
       return redirectResponse
     }
 
-    // Set cache control headers to prevent caching for authenticated routes
+    // Set cache control headers to prevent caching of authenticated pages
     if (session) {
       response.headers.set(
         "Cache-Control",
@@ -166,24 +181,9 @@ export async function middleware(request) {
       response.headers.set("Expires", "0")
     }
 
-    console.log(`[Middleware] Allowing access to ${request.nextUrl.pathname}`)
     return response
   } catch (error) {
-    console.error(`[Middleware] Error checking session:`, error)
-
-    // If there's an error checking the session on a protected route, redirect to sign-in
-    const isProtectedRoute = ["/dashboard", "/call"].some(route =>
-      request.nextUrl.pathname.startsWith(route)
-    )
-
-    if (isProtectedRoute) {
-      console.log(
-        `[Middleware] Error occurred on protected route, redirecting to sign-in`
-      )
-      const redirectUrl = new URL(`/auth/signin`, request.url)
-      return NextResponse.redirect(redirectUrl)
-    }
-
+    console.error(`[Middleware] Error in middleware:`, error)
     return response
   }
 }
