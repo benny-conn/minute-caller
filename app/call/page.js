@@ -40,6 +40,95 @@ function CallPageContent() {
   const [callEnded, setCallEnded] = useState(false)
   const [callResult, setCallResult] = useState(null)
 
+  // Define loadUserData outside of useEffect
+  const loadUserData = async () => {
+    setIsLoading(true)
+    setError("")
+
+    try {
+      // Get current user
+      const { user, error: userError } = await getCurrentUser()
+
+      if (userError) {
+        console.error("Error fetching user:", userError)
+        setError("Authentication error. Please sign in again.")
+        setIsLoading(false)
+        return
+      }
+
+      if (!user) {
+        console.error("No user found in getCurrentUser response")
+        // Instead of immediately redirecting, try to get the session directly
+        try {
+          const { data: sessionData } = await supabase.auth.getSession()
+          if (sessionData?.session?.user) {
+            // We have a session but getCurrentUser failed - use the session user
+            console.log("Using session user instead of getCurrentUser result")
+            setUser(sessionData.session.user)
+
+            // Get user credits using the session user ID
+            const userId = sessionData.session.user.id
+            const { credits, error: creditsError } = await getUserCredits(
+              userId
+            )
+
+            if (creditsError) {
+              console.error("Error fetching credits:", creditsError)
+              // Don't fail, just log the error and use 0 credits
+            }
+
+            // Ensure we have a valid credits value
+            setCredits(credits || 100) // Use 100 as default in case of errors
+            setIsLoading(false)
+            return
+          } else {
+            // No session either, redirect to sign in
+            console.log("No session found, redirecting to sign in")
+            router.push(
+              "/auth/signin?next=" +
+                encodeURIComponent("/call?number=" + phoneNumber)
+            )
+            return
+          }
+        } catch (sessionError) {
+          console.error("Error getting session:", sessionError)
+          // No session, redirect to sign in
+          router.push(
+            "/auth/signin?next=" +
+              encodeURIComponent("/call?number=" + phoneNumber)
+          )
+          return
+        }
+      } else {
+        setUser(user)
+      }
+
+      // Get user credits - use the user from session if we didn't get one from getCurrentUser
+      const userId = user?.id
+      const { credits, error: creditsError } = await getUserCredits(userId)
+
+      if (creditsError) {
+        console.error("Error fetching credits:", creditsError)
+        // Don't fail, just log the error and use 0 credits
+      }
+
+      // Ensure we have a valid credits value
+      setCredits(credits || 100) // Use 100 as default in case of errors
+    } catch (error) {
+      console.error("Error loading user data:", error)
+      // Don't show errors in development mode
+      if (process.env.NODE_ENV !== "development") {
+        setError("An unexpected error occurred. Please try again.")
+      } else {
+        // In development mode, continue with mock data
+        setUser({ id: "dev-user-123", email: "dev@example.com" })
+        setCredits(100)
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   useEffect(() => {
     // Ensure we have a phone number
     if (!phoneNumber) {
@@ -50,83 +139,7 @@ function CallPageContent() {
 
     // Load user data
     loadUserData()
-  }, [phoneNumber])
-
-  useEffect(() => {
-    async function loadUserData() {
-      setIsLoading(true)
-      setError("")
-
-      try {
-        // Get current user
-        const { user, error: userError } = await getCurrentUser()
-
-        if (userError) {
-          console.error("Error fetching user:", userError)
-          setError("Authentication error. Please sign in again.")
-          setIsLoading(false)
-          return
-        }
-
-        if (!user) {
-          console.error("No user found in getCurrentUser response")
-          // Instead of immediately redirecting, try to get the session directly
-          try {
-            const { data: sessionData } = await supabase.auth.getSession()
-            if (sessionData?.session?.user) {
-              // We have a session but getCurrentUser failed - use the session user
-              console.log("Using session user instead of getCurrentUser result")
-              setUser(sessionData.session.user)
-            } else {
-              // No session either, redirect to sign in
-              console.log("No session found, redirecting to sign in")
-              router.push(
-                "/auth/signin?next=" +
-                  encodeURIComponent("/call?number=" + phoneNumber)
-              )
-              return
-            }
-          } catch (sessionError) {
-            console.error("Error getting session:", sessionError)
-            // No session, redirect to sign in
-            router.push(
-              "/auth/signin?next=" +
-                encodeURIComponent("/call?number=" + phoneNumber)
-            )
-            return
-          }
-        } else {
-          setUser(user)
-        }
-
-        // Get user credits - use the user from session if we didn't get one from getCurrentUser
-        const userId = user?.id || sessionData?.session?.user?.id
-        const { credits, error: creditsError } = await getUserCredits(userId)
-
-        if (creditsError) {
-          console.error("Error fetching credits:", creditsError)
-          // Don't fail, just log the error and use 0 credits
-        }
-
-        // Ensure we have a valid credits value
-        setCredits(credits || 100) // Use 100 as default in case of errors
-      } catch (error) {
-        console.error("Error loading user data:", error)
-        // Don't show errors in development mode
-        if (process.env.NODE_ENV !== "development") {
-          setError("An unexpected error occurred. Please try again.")
-        } else {
-          // In development mode, continue with mock data
-          setUser({ id: "dev-user-123", email: "dev@example.com" })
-          setCredits(100)
-        }
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadUserData()
-  }, [router, phoneNumber])
+  }, [phoneNumber, router])
 
   const handleHangUp = () => {
     // This would be handled by the CallInterface component

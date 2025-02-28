@@ -7,9 +7,12 @@ export async function middleware(request) {
     `[Middleware] Processing request for: ${request.nextUrl.pathname}`
   )
 
-  // Skip middleware processing for the sign-in page to prevent loops
-  if (request.nextUrl.pathname === "/auth/signin") {
-    console.log(`[Middleware] Skipping middleware for sign-in page`)
+  // Skip middleware processing for the sign-in page and auth callback to prevent loops
+  if (
+    request.nextUrl.pathname === "/auth/signin" ||
+    request.nextUrl.pathname.startsWith("/auth/callback")
+  ) {
+    console.log(`[Middleware] Skipping middleware for auth page`)
     return NextResponse.next()
   }
 
@@ -65,12 +68,15 @@ export async function middleware(request) {
       console.log(
         `[Middleware] Redirecting to sign-in page from ${request.nextUrl.pathname}`
       )
-      // Include the original URL as the next parameter
+
+      // Capture the original path and search parameters for redirection after login
       const originalPath = request.nextUrl.pathname
-      const searchParams = request.nextUrl.searchParams.toString()
+      const searchParams = request.nextUrl.search // Use search instead of searchParams.toString()
       const fullPath = searchParams
-        ? `${originalPath}?${searchParams}`
+        ? `${originalPath}${searchParams}`
         : originalPath
+
+      console.log(`[Middleware] Redirect next path: ${fullPath}`)
 
       const redirectUrl = new URL(
         `/auth/signin?next=${encodeURIComponent(fullPath)}`,

@@ -109,35 +109,65 @@ export default function CallInterface({
     async function ensureUser() {
       if (!currentUser) {
         try {
+          console.log("Fetching user in CallInterface component")
           const { user: fetchedUser } = await getCurrentUser()
           if (fetchedUser) {
+            console.log("User found via getCurrentUser:", fetchedUser.id)
             setCurrentUser(fetchedUser)
           } else {
             // Try to get user from session directly
             const { data } = await supabase.auth.getSession()
             if (data?.session?.user) {
+              console.log("User found via session:", data.session.user.id)
               setCurrentUser(data.session.user)
+            } else {
+              console.error("No user found in session or getCurrentUser")
+              setErrorMessage("Authentication error. Please sign in again.")
+              setCallStatus("error")
             }
           }
         } catch (error) {
           console.error("Error ensuring user:", error)
+          setErrorMessage("Authentication error. Please try signing in again.")
+          setCallStatus("error")
         }
+      } else {
+        console.log("User already provided as prop:", currentUser.id)
       }
     }
 
     ensureUser()
   }, [currentUser])
 
+  // Update currentUser when user prop changes
+  useEffect(() => {
+    if (user && (!currentUser || user.id !== currentUser.id)) {
+      console.log("Updating currentUser from prop:", user.id)
+      setCurrentUser(user)
+    }
+  }, [user, currentUser])
+
   // Load user credits on component mount
   useEffect(() => {
     async function fetchUserCredits() {
       if (currentUser?.id) {
         try {
-          const credits = await getUserCredits(currentUser.id)
-          setRemainingCredits(credits)
+          console.log("Fetching credits for user:", currentUser.id)
+          const { credits } = await getUserCredits(currentUser.id)
+          if (credits !== undefined) {
+            setRemainingCredits(credits)
+          } else {
+            // Use the credits passed as prop if API call fails
+            setRemainingCredits(userCredits)
+          }
         } catch (error) {
           console.error("Error fetching user credits:", error)
+          // Fallback to prop value
+          setRemainingCredits(userCredits)
         }
+      } else {
+        // Use the credits passed as prop if no user
+        setRemainingCredits(userCredits)
       }
     }
 
@@ -150,7 +180,7 @@ export default function CallInterface({
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       handleHangUp()
     }
-  }, [currentUser])
+  }, [currentUser, userCredits])
 
   // Main call setup function with retry mechanism
   useEffect(() => {
@@ -179,28 +209,40 @@ export default function CallInterface({
       // Check if we have a user
       if (!currentUser?.id) {
         try {
+          console.log("No user found, attempting to get user again")
           // Try to get the user again
           const { user: fetchedUser } = await getCurrentUser()
           if (fetchedUser) {
+            console.log(
+              "User found via getCurrentUser in setupCall:",
+              fetchedUser.id
+            )
             setCurrentUser(fetchedUser)
           } else {
             // Try to get user from session directly
             const { data } = await supabase.auth.getSession()
             if (data?.session?.user) {
+              console.log(
+                "User found via session in setupCall:",
+                data.session.user.id
+              )
               setCurrentUser(data.session.user)
             } else {
               // No user found, show error
+              console.error("No user found in setupCall")
               setErrorMessage("Authentication error. Please sign in again.")
               setCallStatus("error")
               return
             }
           }
         } catch (error) {
-          console.error("Error getting user:", error)
+          console.error("Error getting user in setupCall:", error)
           setErrorMessage("Authentication error. Please sign in again.")
           setCallStatus("error")
           return
         }
+      } else {
+        console.log("Using existing user in setupCall:", currentUser.id)
       }
 
       // Check microphone permissions
@@ -220,7 +262,11 @@ export default function CallInterface({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identity: currentUser?.id || "anonymous-user" }),
+        body: JSON.stringify({
+          identity: currentUser?.id || "anonymous-user",
+          // Include a timestamp to prevent caching issues
+          timestamp: new Date().getTime(),
+        }),
       })
 
       if (!tokenResponse.ok) {
@@ -233,6 +279,8 @@ export default function CallInterface({
       if (!token) {
         throw new Error("No token received from server")
       }
+
+      console.log("Twilio token received, initializing device")
 
       // Initialize Twilio device
       const device = await initializeTwilioDevice(token)
@@ -375,6 +423,37 @@ export default function CallInterface({
     }, 1000)
   }
 
+  // Initialize call timer when call becomes active
+  useEffect(() => {
+    let intervalId
+
+    if (callStatus === "active") {
+      intervalId = setInterval(() => {
+        setCallDuration(prev => {
+          const newDuration = prev + 1
+
+          // Calculate remaining credits
+          const cost = calculateCallCost(newDuration, callRate)
+          const newRemainingCredits = userCredits - cost
+          setRemainingCredits(newRemainingCredits)
+
+          // Auto-end call if credits run out
+          if (newRemainingCredits <= 0) {
+            handleHangUp()
+          }
+
+          return newDuration
+        })
+      }, 1000)
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [callStatus, userCredits, callRate])
+
   // Handle call hangup
   const handleHangUp = () => {
     console.log("Hanging up call")
@@ -413,31 +492,58 @@ export default function CallInterface({
     const finalCost = calculateCallCost(finalDuration, callRate)
     const finalCreditsUsed = finalCost
 
+    console.log(
+      `Call ended - Duration: ${finalDuration}s, Cost: ${finalCost} credits`
+    )
+
     // Only process credits and call history if we have a user and the call lasted more than 0 seconds
     if (finalDuration > 0) {
       try {
         // Deduct credits from user account
         if (currentUser?.id) {
+          console.log(`Processing call end for user: ${currentUser.id}`)
+
           // Deduct credits
-          const newCreditBalance = remainingCredits - finalCreditsUsed
+          const newCreditBalance = Math.max(
+            0,
+            remainingCredits - finalCreditsUsed
+          )
+          console.log(`New credit balance: ${newCreditBalance}`)
 
           // Update credits in database
           try {
-            await updateUserCredits(currentUser.id, newCreditBalance)
+            const updateResult = await updateUserCredits(
+              currentUser.id,
+              newCreditBalance
+            )
+            if (updateResult.error) {
+              console.error("Error updating credits:", updateResult.error)
+            } else {
+              console.log("Credits updated successfully")
+            }
           } catch (error) {
             console.error("Error updating credits:", error)
           }
 
           // Save call history
           try {
-            await saveCallHistory({
+            const callHistoryData = {
               user_id: currentUser.id,
               phone_number: phoneNumber,
               duration: finalDuration,
               cost: finalCost,
               status: "completed",
               created_at: new Date().toISOString(),
-            })
+            }
+
+            console.log("Saving call history:", callHistoryData)
+            const saveResult = await saveCallHistory(callHistoryData)
+
+            if (saveResult.error) {
+              console.error("Error saving call history:", saveResult.error)
+            } else {
+              console.log("Call history saved successfully")
+            }
           } catch (error) {
             console.error("Error saving call history:", error)
           }
@@ -448,10 +554,26 @@ export default function CallInterface({
             cost: finalCost,
             remainingCredits: newCreditBalance,
           })
+        } else {
+          console.warn("No user ID available to save call history")
+          // Still call the callback with the result even if we couldn't save to the database
+          onCallFinished({
+            duration: finalDuration,
+            cost: finalCost,
+            remainingCredits: remainingCredits - finalCreditsUsed,
+          })
         }
       } catch (error) {
         console.error("Error processing call end:", error)
+        // Still call the callback with the result even if there was an error
+        onCallFinished({
+          duration: finalDuration,
+          cost: finalCost,
+          remainingCredits: remainingCredits - finalCreditsUsed,
+        })
       }
+    } else {
+      console.log("Call duration was 0, not processing credits or history")
     }
 
     // Clean up the connection
@@ -484,37 +606,6 @@ export default function CallInterface({
     setErrorMessage("")
     setSetupAttempts(prev => prev + 1) // Trigger a retry
   }
-
-  // Initialize call timer when call becomes active
-  useEffect(() => {
-    let intervalId
-
-    if (callStatus === "active") {
-      intervalId = setInterval(() => {
-        setCallDuration(prev => {
-          const newDuration = prev + 1
-
-          // Calculate remaining credits
-          const cost = calculateCallCost(newDuration, callRate)
-          const newRemainingCredits = userCredits - cost
-          setRemainingCredits(newRemainingCredits)
-
-          // Auto-end call if credits run out
-          if (newRemainingCredits <= 0) {
-            handleHangUp()
-          }
-
-          return newDuration
-        })
-      }, 1000)
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-    }
-  }, [callStatus, userCredits, callRate])
 
   const handleKeypadPress = key => {
     // In development mode, just log the press

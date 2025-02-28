@@ -347,6 +347,7 @@ function DashboardContent() {
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg shadow-indigo-100 dark:shadow-indigo-900/20 overflow-hidden border border-gray-100 dark:border-gray-700">
               <div className="flex border-b border-gray-100 dark:border-gray-700 overflow-x-auto">
                 <button
+                  type="button"
                   onClick={() => setActiveTab("dial")}
                   className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-colors ${
                     activeTab === "dial"
@@ -358,6 +359,7 @@ function DashboardContent() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setActiveTab("history")}
                   className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-colors ${
                     activeTab === "history"
@@ -369,6 +371,7 @@ function DashboardContent() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setActiveTab("credits")}
                   className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-colors ${
                     activeTab === "credits"
@@ -380,6 +383,7 @@ function DashboardContent() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setActiveTab("account")}
                   className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-colors ${
                     activeTab === "account"
@@ -422,6 +426,7 @@ function DashboardContent() {
 
                     <button
                       onClick={handleCall}
+                      type="button"
                       disabled={!phoneNumber || credits <= 0}
                       className={`w-full py-3.5 px-4 rounded-xl font-semibold flex items-center justify-center ${styles.buttonGradient} text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400`}>
                       <PhoneCall className="h-5 w-5 mr-2" />
@@ -433,6 +438,7 @@ function DashboardContent() {
                         <p className="text-red-600 dark:text-red-300">
                           You need credits to make calls.{" "}
                           <button
+                            type="button"
                             onClick={() => setActiveTab("credits")}
                             className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline focus:outline-none">
                             Buy credits
@@ -539,6 +545,7 @@ function DashboardContent() {
                           Perfect for occasional international callers
                         </p>
                         <button
+                          type="button"
                           onClick={() => handleBuyCredits("basic")}
                           className={`w-full ${styles.buttonGradient} text-white py-2.5 px-4 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition-all`}>
                           Buy Now
@@ -647,7 +654,9 @@ function DashboardContent() {
                         <h4 className="font-medium mb-3 text-gray-800 dark:text-gray-200">
                           Security
                         </h4>
-                        <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors">
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors">
                           Change Password
                         </button>
                       </div>
