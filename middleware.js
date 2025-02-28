@@ -7,6 +7,14 @@ export async function middleware(request) {
     `[Middleware] Processing request for: ${request.nextUrl.pathname}`
   )
 
+  // Log all cookies for debugging
+  console.log(
+    `[Middleware] Cookies present:`,
+    Array.from(request.cookies.getAll())
+      .map(c => `${c.name}: ${c.value ? "present" : "empty"}`)
+      .join(", ")
+  )
+
   // Skip middleware processing for the sign-in page to prevent loops
   if (request.nextUrl.pathname === "/auth/signin") {
     console.log(`[Middleware] Skipping middleware for sign-in page`)
@@ -30,19 +38,35 @@ export async function middleware(request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
-        get: name => request.cookies.get(name)?.value,
+        get: name => {
+          const cookie = request.cookies.get(name)
+          console.log(
+            `[Middleware] Getting cookie: ${name}, exists: ${!!cookie}`
+          )
+          return cookie?.value
+        },
         set: (name, value, options) => {
+          console.log(
+            `[Middleware] Setting cookie: ${name}, value length: ${
+              value?.length || 0
+            }`
+          )
           response.cookies.set({
             name,
             value,
             ...options,
+            path: "/",
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
           })
         },
         remove: (name, options) => {
+          console.log(`[Middleware] Removing cookie: ${name}`)
           response.cookies.set({
             name,
             value: "",
             ...options,
+            maxAge: 0,
           })
         },
       },
@@ -51,15 +75,49 @@ export async function middleware(request) {
 
   // Refresh session if expired - required for Server Components
   try {
+    console.log(`[Middleware] Attempting to get session...`)
     const {
       data: { session },
     } = await supabase.auth.getSession()
 
     console.log(
       `[Middleware] Session check result: ${
-        session ? "Session exists" : "No session"
+        session ? `Session exists for ${session.user.email}` : "No session"
       }`
     )
+
+    if (session) {
+      console.log(
+        `[Middleware] Session expires at: ${new Date(
+          session.expires_at * 1000
+        ).toISOString()}`
+      )
+      console.log(`[Middleware] Current time: ${new Date().toISOString()}`)
+
+      // Check if session is about to expire and refresh it
+      const expiresAt = session.expires_at * 1000 // convert to milliseconds
+      const now = Date.now()
+      const timeUntilExpiry = expiresAt - now
+
+      console.log(
+        `[Middleware] Time until session expiry: ${Math.floor(
+          timeUntilExpiry / 1000 / 60
+        )} minutes`
+      )
+
+      // If session expires in less than 10 minutes, refresh it
+      if (timeUntilExpiry < 10 * 60 * 1000) {
+        console.log(`[Middleware] Session expiring soon, refreshing...`)
+        const { data: refreshData, error: refreshError } =
+          await supabase.auth.refreshSession()
+
+        if (refreshError) {
+          console.error(`[Middleware] Error refreshing session:`, refreshError)
+        } else {
+          console.log(`[Middleware] Session refreshed successfully`)
+        }
+      }
+    }
 
     // Protected routes that require authentication
     const protectedRoutes = ["/dashboard", "/call"]

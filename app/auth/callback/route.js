@@ -12,6 +12,16 @@ export async function GET(request) {
   console.log(`[Auth Callback] Code present: ${!!code}`)
   console.log(`[Auth Callback] Next URL: ${next}`)
 
+  // Log all cookies for debugging
+  const cookieStore = cookies()
+  const allCookies = cookieStore.getAll()
+  console.log(
+    `[Auth Callback] Cookies present:`,
+    allCookies
+      .map(c => `${c.name}: ${c.value ? "present" : "empty"}`)
+      .join(", ")
+  )
+
   if (!code) {
     console.log("[Auth Callback] No code provided, redirecting to sign-in")
     return NextResponse.redirect(new URL("/auth/signin", request.url))
@@ -28,21 +38,37 @@ export async function GET(request) {
       {
         cookies: {
           get(name) {
-            return cookies().get(name)?.value
+            const cookie = cookieStore.get(name)
+            console.log(
+              `[Auth Callback] Getting cookie: ${name}, exists: ${!!cookie}`
+            )
+            return cookie?.value
           },
           set(name, value, options) {
             // Set cookies with appropriate options for better persistence
+            console.log(
+              `[Auth Callback] Setting cookie: ${name}, value length: ${
+                value?.length || 0
+              }`
+            )
+
             const cookieOptions = {
               ...options,
               secure: process.env.NODE_ENV === "production",
               sameSite: "lax",
               path: "/",
+              // Set a long max age for persistent cookies
+              maxAge: 60 * 60 * 24 * 7, // 7 days
             }
-            cookies().set(name, value, cookieOptions)
+
+            cookieStore.set(name, value, cookieOptions)
             response.cookies.set(name, value, cookieOptions)
+
+            console.log(`[Auth Callback] Cookie set: ${name}`)
           },
           remove(name, options) {
-            cookies().set(name, "", { ...options, maxAge: 0 })
+            console.log(`[Auth Callback] Removing cookie: ${name}`)
+            cookieStore.set(name, "", { ...options, maxAge: 0 })
             response.cookies.set(name, "", { ...options, maxAge: 0 })
           },
         },
@@ -52,6 +78,7 @@ export async function GET(request) {
     console.log("[Auth Callback] Created Supabase client")
 
     // Exchange the code for a session
+    console.log("[Auth Callback] Exchanging code for session...")
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (error) {
@@ -66,6 +93,11 @@ export async function GET(request) {
 
     console.log("[Auth Callback] Successfully exchanged code for session")
     console.log(`[Auth Callback] User: ${data?.user?.email}`)
+    console.log(
+      `[Auth Callback] Session expires at: ${new Date(
+        data?.session?.expires_at * 1000
+      ).toISOString()}`
+    )
     console.log(`[Auth Callback] Redirecting to: ${next}`)
 
     // Set comprehensive cache control headers to prevent caching
@@ -75,6 +107,14 @@ export async function GET(request) {
     )
     response.headers.set("Pragma", "no-cache")
     response.headers.set("Expires", "0")
+
+    // Log all cookies after setting session
+    console.log(
+      `[Auth Callback] Response cookies:`,
+      Array.from(response.cookies.getAll())
+        .map(c => `${c.name}: ${c.value ? "present" : "empty"}`)
+        .join(", ")
+    )
 
     return response
   } catch (error) {

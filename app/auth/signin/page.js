@@ -141,6 +141,15 @@ function SignInContent() {
                       colors: {
                         brand: "#6366f1", // indigo-500
                         brandAccent: "#4f46e5", // indigo-600
+                        brandButtonText: "#ffffff",
+                        brandButtonBackground: "#6366f1",
+                        brandButtonTextHover: "#ffffff",
+                        brandButtonBackgroundHover: "#4f46e5",
+                        inputText: "#ffffff",
+                        inputBorder: "#6366f1",
+                        inputBorderHover: "#4f46e5",
+                        inputBorderFocus: "#4f46e5",
+                        inputBorderError: "#ef4444",
                       },
                       borderRadii: {
                         button: "0.75rem", // rounded-xl

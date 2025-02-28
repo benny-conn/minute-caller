@@ -15,6 +15,7 @@ import {
   getCurrentUser,
   getUserCredits,
   getUserCallHistory,
+  createClient,
 } from "@/app/lib/supabase"
 import {
   formatPhoneNumber,
@@ -67,6 +68,7 @@ function DashboardContent() {
   const [phoneNumber, setPhoneNumber] = useState("")
   const [error, setError] = useState(null)
   const [paymentStatus, setPaymentStatus] = useState(null)
+  const [supabase] = useState(() => createClient())
 
   // Get query parameters
   const searchParams = useSearchParams()
@@ -76,6 +78,29 @@ function DashboardContent() {
   // Load user data on component mount
   useEffect(() => {
     loadUserData()
+
+    // Set up auth state change listener
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(
+        `[Dashboard] Auth state changed: ${event}`,
+        session?.user?.email || "no user"
+      )
+
+      if (event === "SIGNED_OUT") {
+        // Redirect to sign-in page if signed out
+        window.location.href = "/auth/signin"
+      } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        // Reload user data if signed in or token refreshed
+        loadUserData()
+      }
+    })
+
+    // Clean up subscription on unmount
+    return () => {
+      subscription?.unsubscribe()
+    }
   }, [])
 
   // Handle payment status from URL parameters
@@ -105,6 +130,24 @@ function DashboardContent() {
     setError(null)
 
     try {
+      console.log("[Dashboard] Loading user data...")
+
+      // First, try to refresh the session
+      try {
+        const { data: refreshData, error: refreshError } =
+          await supabase.auth.refreshSession()
+        if (!refreshError) {
+          console.log("[Dashboard] Session refreshed successfully")
+        } else {
+          console.log(
+            "[Dashboard] Session refresh failed:",
+            refreshError.message
+          )
+        }
+      } catch (refreshErr) {
+        console.error("[Dashboard] Error refreshing session:", refreshErr)
+      }
+
       // Get current user
       const { user, error: userError } = await getCurrentUser()
 
@@ -123,7 +166,7 @@ function DashboardContent() {
         return
       }
 
-      console.log("User authenticated successfully:", user.email)
+      console.log("[Dashboard] User authenticated successfully:", user.email)
       setUser(user)
 
       // Get user credits
