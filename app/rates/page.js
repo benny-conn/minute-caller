@@ -9,6 +9,43 @@ import {
   getCountriesByContinent,
 } from "@/app/lib/countryRates"
 import Footer from "@/app/components/Footer"
+import StructuredData from "@/app/components/StructuredData"
+
+// JSON-LD structured data for the rates page
+const ratesStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: "International Call Rates - MinuteCaller",
+  description:
+    "Check our competitive rates for calling international destinations. Find the cost to call any country worldwide with MinuteCaller's browser-based calling service.",
+  url: "https://minutecaller.com/rates",
+  mainEntity: {
+    "@type": "Table",
+    about: {
+      "@type": "Thing",
+      name: "International Calling Rates",
+    },
+  },
+}
+
+export const metadata = {
+  title: "International Call Rates - MinuteCaller",
+  description:
+    "Check our competitive rates for calling international destinations. Find the cost to call any country worldwide with MinuteCaller's browser-based calling service.",
+  keywords: [
+    "international call rates",
+    "international calling prices",
+    "country calling rates",
+    "cheap international calls",
+    "global calling rates",
+    "international phone rates",
+    "call abroad cost",
+    "international dialing rates",
+  ],
+  alternates: {
+    canonical: "/rates",
+  },
+}
 
 // Custom styles
 const styles = {
@@ -81,11 +118,17 @@ export default function RatesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Structured Data */}
+      <StructuredData data={ratesStructuredData} />
+
       <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="flex items-center gap-2"
+            aria-label="MinuteCaller Home">
             <div className="p-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500">
-              <PhoneCall className="h-5 w-5 text-white" />
+              <PhoneCall className="h-5 w-5 text-white" aria-hidden="true" />
             </div>
             <span className="text-xl font-bold">
               <span className={styles.gradientText}>Minute</span>Caller
@@ -95,8 +138,9 @@ export default function RatesPage() {
           <div className="flex items-center gap-4">
             <Link
               href="/dashboard"
-              className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
+              className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium flex items-center gap-1.5"
+              aria-label="Back to Dashboard">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to Dashboard
             </Link>
 
@@ -125,22 +169,30 @@ export default function RatesPage() {
             <div className="flex flex-col md:flex-row gap-4 mb-6">
               <div className="relative flex-1">
                 <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-gray-400" />
+                  <Search
+                    className="h-4 w-4 text-gray-400"
+                    aria-hidden="true"
+                  />
                 </div>
                 <input
                   type="text"
                   value={searchInput}
                   onChange={handleSearchChange}
                   placeholder="Search country or dial code..."
+                  aria-label="Search country or dial code"
                   className={`w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 ${styles.inputFocus} text-gray-700 dark:text-gray-300`}
                 />
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div
+                className="flex flex-wrap gap-2"
+                role="radiogroup"
+                aria-label="Filter by continent">
                 {continents.map(continent => (
                   <button
                     key={continent}
                     onClick={() => handleContinentChange(continent)}
+                    aria-pressed={selectedContinent === continent}
                     className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                       selectedContinent === continent
                         ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium"
@@ -155,19 +207,29 @@ export default function RatesPage() {
             {/* Results */}
             {displayCountries.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <table
+                  className="min-w-full divide-y divide-gray-200 dark:divide-gray-700"
+                  aria-label="International calling rates">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
                     <tr>
-                      <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Country
                       </th>
-                      <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Dial Code
                       </th>
-                      <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Rate (Credits/Min)
                       </th>
-                      <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Continent
                       </th>
                     </tr>
@@ -198,7 +260,10 @@ export default function RatesPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <Globe className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                <Globe
+                  className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600"
+                  aria-hidden="true"
+                />
                 <p className="text-gray-500 dark:text-gray-400 font-medium">
                   No countries found matching your search
                 </p>

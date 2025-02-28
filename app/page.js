@@ -10,6 +10,7 @@ import {
   Check,
 } from "lucide-react"
 import Footer from "@/app/components/Footer"
+import StructuredData from "@/app/components/StructuredData"
 
 // Custom styles
 const styles = {
@@ -21,22 +22,85 @@ const styles = {
   cardHover: "transition-all duration-200 hover:shadow-xl hover:-translate-y-1",
 }
 
+// JSON-LD structured data for the home page
+const websiteStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "MinuteCaller",
+  url: "https://minutecaller.com",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: "https://minutecaller.com/rates?search={search_term_string}",
+    "query-input": "required name=search_term_string",
+  },
+}
+
+const organizationStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "MinuteCaller",
+  url: "https://minutecaller.com",
+  logo: "https://minutecaller.com/logo.png",
+  description:
+    "Make affordable international calls directly from your browser with MinuteCaller. No downloads, no contracts - just pay-as-you-go with competitive rates to 180+ countries.",
+  sameAs: ["https://twitter.com/tubesqueezing"],
+}
+
+const serviceStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "Service",
+  name: "MinuteCaller International Calling",
+  provider: {
+    "@type": "Organization",
+    name: "MinuteCaller",
+  },
+  description:
+    "Make affordable international calls directly from your browser. No downloads required, just sign up and start calling.",
+  offers: {
+    "@type": "Offer",
+    price: "0.01",
+    priceCurrency: "USD",
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price: "0.01",
+      priceCurrency: "USD",
+      unitText: "per minute",
+      billingIncrement: "P1M",
+      priceType: "https://schema.org/InvoicePrice",
+    },
+  },
+  areaServed: {
+    "@type": "Country",
+    name: "Worldwide",
+  },
+}
+
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Structured Data */}
+      <StructuredData data={websiteStructuredData} />
+      <StructuredData data={organizationStructuredData} />
+      <StructuredData data={serviceStructuredData} />
+
       {/* Header/Navigation */}
       <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-700 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="flex items-center gap-2"
+            aria-label="MinuteCaller Home">
             <div className="p-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500">
-              <PhoneCall className="h-5 w-5 text-white" />
+              <PhoneCall className="h-5 w-5 text-white" aria-hidden="true" />
             </div>
             <span className="text-xl font-bold">
               <span className={styles.gradientText}>Minute</span>Caller
             </span>
           </Link>
 
-          <nav className="hidden md:flex space-x-6">
+          <nav
+            className="hidden md:flex space-x-6"
+            aria-label="Main Navigation">
             <Link
               href="/#features"
               className="text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400">
@@ -51,6 +115,11 @@ export default function Home() {
               href="/#how-it-works"
               className="text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400">
               How It Works
+            </Link>
+            <Link
+              href="/rates"
+              className="text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400">
+              Rates
             </Link>
           </nav>
 
@@ -92,7 +161,10 @@ export default function Home() {
               <div
                 className={`bg-white dark:bg-gray-800 p-8 rounded-2xl ${styles.cardShadow} ${styles.cardHover}`}>
                 <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-xl w-14 h-14 flex items-center justify-center mb-6">
-                  <Globe className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
+                  <Globe
+                    className="h-7 w-7 text-indigo-600 dark:text-indigo-400"
+                    aria-hidden="true"
+                  />
                 </div>
                 <h3 className="text-xl font-semibold mb-3">Global Coverage</h3>
                 <p className="text-gray-600 dark:text-gray-300">

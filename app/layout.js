@@ -12,11 +12,13 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata = {
-  title: "MinuteCaller - Pay-as-you-go international calls from your browser",
+  title:
+    "MinuteCaller - Affordable International Calls from Your Browser | No Downloads",
   description:
-    "MinuteCaller - A Skype alternative to call international numbers worldwide",
+    "Make affordable international calls directly from your browser with MinuteCaller. No downloads, no contracts - just pay-as-you-go with competitive rates to 180+ countries. The perfect Skype alternative for global calling.",
   keywords: [
     "international calls",
+    "browser calling",
     "phone calls",
     "calling service",
     "Skype alternative",
@@ -32,7 +34,67 @@ export const metadata = {
     "call anywhere",
     "call anywhere in the world",
     "call anywhere in the world for cheap",
+    "no download calling",
+    "browser-based calls",
+    "cheap international calls",
+    "online calling service",
+    "web calling",
+    "call abroad",
+    "call overseas",
+    "global phone service",
+    "international communication",
+    "long distance calls",
   ],
+  authors: [{ name: "MinuteCaller" }],
+  creator: "MinuteCaller",
+  publisher: "MinuteCaller",
+  formatDetection: {
+    telephone: true,
+    email: false,
+    address: false,
+  },
+  metadataBase: new URL("https://minutecaller.com"),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "MinuteCaller - Affordable International Calls from Your Browser",
+    description:
+      "Make international calls directly from your browser. No downloads, no contracts - just pay-as-you-go with competitive rates worldwide.",
+    url: "https://minutecaller.com",
+    siteName: "MinuteCaller",
+    locale: "en_US",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "MinuteCaller - Make international calls from your browser",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MinuteCaller - Affordable International Calls from Your Browser",
+    description:
+      "Make international calls directly from your browser. No downloads required.",
+    creator: "@tubesqueezing",
+    images: ["/twitter-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    google: "google-site-verification-code", // Replace with actual verification code when available
+  },
 }
 
 export default function RootLayout({ children }) {
