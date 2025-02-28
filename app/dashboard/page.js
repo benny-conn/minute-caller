@@ -109,12 +109,21 @@ function DashboardContent() {
       const { user, error: userError } = await getCurrentUser()
 
       if (userError || !user) {
-        // Don't redirect directly as this can cause a loop with middleware
+        console.error("Authentication failed:", userError)
         setError("Authentication failed. Please try signing in again.")
+
+        // Add a small delay before redirecting to prevent immediate redirect loops
+        setTimeout(() => {
+          window.location.href = `/auth/signin?next=${encodeURIComponent(
+            window.location.pathname
+          )}`
+        }, 2000)
+
         setIsLoading(false)
         return
       }
 
+      console.log("User authenticated successfully:", user.email)
       setUser(user)
 
       // Get user credits

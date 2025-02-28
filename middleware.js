@@ -85,13 +85,47 @@ export async function middleware(request) {
         `/auth/signin?next=${encodeURIComponent(fullPath)}`,
         request.url
       )
-      return NextResponse.redirect(redirectUrl)
+
+      // Set cache control headers to prevent caching
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+      redirectResponse.headers.set(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, max-age=0"
+      )
+      redirectResponse.headers.set("Pragma", "no-cache")
+      redirectResponse.headers.set("Expires", "0")
+
+      return redirectResponse
+    }
+
+    // Set cache control headers to prevent caching for authenticated routes
+    if (session) {
+      response.headers.set(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, max-age=0"
+      )
+      response.headers.set("Pragma", "no-cache")
+      response.headers.set("Expires", "0")
     }
 
     console.log(`[Middleware] Allowing access to ${request.nextUrl.pathname}`)
     return response
   } catch (error) {
     console.error(`[Middleware] Error checking session:`, error)
+
+    // If there's an error checking the session on a protected route, redirect to sign-in
+    const isProtectedRoute = ["/dashboard", "/call"].some(route =>
+      request.nextUrl.pathname.startsWith(route)
+    )
+
+    if (isProtectedRoute) {
+      console.log(
+        `[Middleware] Error occurred on protected route, redirecting to sign-in`
+      )
+      const redirectUrl = new URL(`/auth/signin`, request.url)
+      return NextResponse.redirect(redirectUrl)
+    }
+
     return response
   }
 }

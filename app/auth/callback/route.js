@@ -31,8 +31,15 @@ export async function GET(request) {
             return cookies().get(name)?.value
           },
           set(name, value, options) {
-            cookies().set(name, value, options)
-            response.cookies.set(name, value, options)
+            // Set cookies with appropriate options for better persistence
+            const cookieOptions = {
+              ...options,
+              secure: process.env.NODE_ENV === "production",
+              sameSite: "lax",
+              path: "/",
+            }
+            cookies().set(name, value, cookieOptions)
+            response.cookies.set(name, value, cookieOptions)
           },
           remove(name, options) {
             cookies().set(name, "", { ...options, maxAge: 0 })
@@ -61,8 +68,13 @@ export async function GET(request) {
     console.log(`[Auth Callback] User: ${data?.user?.email}`)
     console.log(`[Auth Callback] Redirecting to: ${next}`)
 
-    // Set cache control headers to prevent caching
-    response.headers.set("Cache-Control", "no-store, max-age=0")
+    // Set comprehensive cache control headers to prevent caching
+    response.headers.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, max-age=0"
+    )
+    response.headers.set("Pragma", "no-cache")
+    response.headers.set("Expires", "0")
 
     return response
   } catch (error) {

@@ -59,12 +59,19 @@ function SignInContent() {
 
     // Check if user is already logged in
     const checkUser = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        console.log(
-          "[SignIn Page] User already logged in, redirecting to dashboard"
-        )
-        window.location.href = next
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
+          console.log(
+            "[SignIn Page] User already logged in, redirecting to dashboard"
+          )
+          // Use a small delay to ensure cookies are properly set
+          setTimeout(() => {
+            window.location.href = next
+          }, 100)
+        }
+      } catch (error) {
+        console.error("[SignIn Page] Error checking session:", error)
       }
     }
 
@@ -77,7 +84,10 @@ function SignInContent() {
       console.log(`[SignIn Page] Auth state changed: ${event}`, session)
       if (event === "SIGNED_IN" && session) {
         console.log("[SignIn Page] User signed in, redirecting to dashboard")
-        window.location.href = next
+        // Use a small delay to ensure cookies are properly set
+        setTimeout(() => {
+          window.location.href = next
+        }, 100)
       }
     })
 
