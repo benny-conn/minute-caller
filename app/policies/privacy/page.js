@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import Footer from "@/app/components/Footer"
 import StructuredData from "@/app/components/StructuredData"
+import Head from "next/head"
 
 // JSON-LD structured data for the privacy policy page
 const privacyStructuredData = {
@@ -22,15 +23,6 @@ const privacyStructuredData = {
   },
 }
 
-export const metadata = {
-  title: "Privacy Policy - MinuteCaller",
-  description:
-    "Read the Privacy Policy for MinuteCaller's international calling service. Learn how we collect, use, and protect your personal information when you use our browser-based calling platform.",
-  alternates: {
-    canonical: "/policies/privacy",
-  },
-}
-
 export default function PrivacyPage() {
   const lastUpdated = new Date().toLocaleDateString("en-US", {
     month: "long",
@@ -42,6 +34,15 @@ export default function PrivacyPage() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Structured Data */}
       <StructuredData data={privacyStructuredData} />
+
+      <Head>
+        <title>Privacy Policy - MinuteCaller</title>
+        <meta
+          name="description"
+          content="Read the Privacy Policy for MinuteCaller's international calling service. Learn how we collect, use, and protect your personal information when you use our browser-based calling platform."
+        />
+        <link rel="canonical" href="/policies/privacy" />
+      </Head>
 
       <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">

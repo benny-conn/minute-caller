@@ -23,15 +23,6 @@ const termsStructuredData = {
   },
 }
 
-export const metadata = {
-  title: "Terms of Service - MinuteCaller",
-  description:
-    "Read the Terms of Service for MinuteCaller's international calling service. Learn about our policies, user agreements, and service conditions.",
-  alternates: {
-    canonical: "/policies/terms",
-  },
-}
-
 export default function TermsPage() {
   const lastUpdated = new Date().toLocaleDateString("en-US", {
     month: "long",
@@ -43,6 +34,15 @@ export default function TermsPage() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Structured Data */}
       <StructuredData data={termsStructuredData} />
+
+      <Head>
+        <title>Terms of Service - MinuteCaller</title>
+        <meta
+          name="description"
+          content="Read the Terms of Service for MinuteCaller's international calling service. Learn about our policies, user agreements, and service conditions."
+        />
+        <link rel="canonical" href="/policies/terms" />
+      </Head>
 
       <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">

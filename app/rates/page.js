@@ -10,6 +10,7 @@ import {
 } from "@/app/lib/countryRates"
 import Footer from "@/app/components/Footer"
 import StructuredData from "@/app/components/StructuredData"
+import Head from "next/head"
 
 // JSON-LD structured data for the rates page
 const ratesStructuredData = {
@@ -25,25 +26,6 @@ const ratesStructuredData = {
       "@type": "Thing",
       name: "International Calling Rates",
     },
-  },
-}
-
-export const metadata = {
-  title: "International Call Rates - MinuteCaller",
-  description:
-    "Check our competitive rates for calling international destinations. Find the cost to call any country worldwide with MinuteCaller's browser-based calling service.",
-  keywords: [
-    "international call rates",
-    "international calling prices",
-    "country calling rates",
-    "cheap international calls",
-    "global calling rates",
-    "international phone rates",
-    "call abroad cost",
-    "international dialing rates",
-  ],
-  alternates: {
-    canonical: "/rates",
   },
 }
 
@@ -120,6 +102,19 @@ export default function RatesPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Structured Data */}
       <StructuredData data={ratesStructuredData} />
+
+      <Head>
+        <title>International Call Rates - MinuteCaller</title>
+        <meta
+          name="description"
+          content="Check our competitive rates for calling international destinations. Find the cost to call any country worldwide with MinuteCaller's browser-based calling service."
+        />
+        <meta
+          name="keywords"
+          content="international call rates, international calling prices, country calling rates, cheap international calls, global calling rates, international phone rates, call abroad cost, international dialing rates"
+        />
+        <link rel="canonical" href="/rates" />
+      </Head>
 
       <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
