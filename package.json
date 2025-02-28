@@ -1,5 +1,5 @@
 {
-  "name": "skype",
+  "name": "minutecaller",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,15 +9,31 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@edge-runtime/cookies": "^6.0.0",
+    "@stripe/stripe-js": "^2.2.0",
+    "@supabase/auth-ui-react": "^0.4.7",
+    "@supabase/auth-ui-shared": "^0.1.8",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.1",
+    "clsx": "^2.0.0",
+    "lucide-react": "^0.292.0",
+    "next": "15.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.2.0"
+    "react-hook-form": "^7.48.2",
+    "react-phone-number-input": "^3.3.7",
+    "stripe": "^14.5.0",
+    "tailwind-merge": "^2.0.0",
+    "twilio": "^5.4.5",
+    "twilio-client": "^1.15.1",
+    "zustand": "^4.4.6"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.2.0",
-    "@eslint/eslintrc": "^3"
-  }
+    "tailwindcss": "^4"
+  },
+  "packageManager": "yarn@4.6.0"
 }
