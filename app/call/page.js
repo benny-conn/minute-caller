@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PhoneCall } from "lucide-react"
@@ -12,7 +12,22 @@ import {
 } from "@/app/lib/supabase"
 import CallInterface from "@/app/components/call/CallInterface"
 
-export default function CallPage() {
+// Loading component to display while suspense is active
+function CallPageLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-300">
+          Preparing your call...
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Component that uses useSearchParams
+function CallPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const phoneNumber = searchParams.get("number")
@@ -248,5 +263,14 @@ export default function CallPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+// Main component that wraps the content in a Suspense boundary
+export default function CallPage() {
+  return (
+    <Suspense fallback={<CallPageLoading />}>
+      <CallPageContent />
+    </Suspense>
   )
 }

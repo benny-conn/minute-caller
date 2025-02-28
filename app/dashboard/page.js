@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { PhoneCall, History, User, CreditCard, LogOut, Zap } from "lucide-react"
 import {
@@ -35,7 +35,20 @@ const styles = {
   activeTabGradient: "bg-gradient-to-r from-indigo-600 to-violet-600",
 }
 
-export default function Dashboard() {
+// Loading component to display while suspense is active
+function DashboardLoading() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-14 h-14 border-4 border-indigo-400 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-gray-600 dark:text-gray-400">Loading dashboard...</p>
+      </div>
+    </div>
+  )
+}
+
+// Component that uses useSearchParams
+function DashboardContent() {
   const [activeTab, setActiveTab] = useState("dial")
   const [user, setUser] = useState(null)
   const [credits, setCredits] = useState(0)
@@ -254,20 +267,13 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-semibold mb-2">Authentication Error</h2>
-            <p className="text-gray-600 dark:text-gray-300 mb-5">{error}</p>
-            <div className="flex justify-center gap-4">
-              <Link
-                href="/auth/signin"
-                className={`${styles.buttonGradient} text-white px-4 py-2 rounded-lg font-medium shadow-md shadow-indigo-500/20`}>
-                Sign In Again
-              </Link>
-              <Link
-                href="/"
-                className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-medium">
-                Go Home
-              </Link>
-            </div>
+            <h2 className="text-xl font-bold mb-4">Error</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+            <Link
+              href="/auth/signin"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md inline-block">
+              Sign In Again
+            </Link>
           </div>
         ) : (
           <>
@@ -662,5 +668,14 @@ export default function Dashboard() {
         </div>
       </footer>
     </div>
+  )
+}
+
+// Main component that wraps the content in a Suspense boundary
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardContent />
+    </Suspense>
   )
 }

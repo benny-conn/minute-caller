@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { CheckCircle, CreditCard, PhoneCall } from "lucide-react"
@@ -11,7 +11,22 @@ import {
 } from "@/app/lib/supabase"
 import { getCreditPackageById } from "@/app/lib/stripe"
 
-export default function DevCheckoutSuccessPage() {
+// Loading component to display while suspense is active
+function CheckoutSuccessLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-300">
+          Processing your payment...
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Component that uses useSearchParams
+function CheckoutSuccessContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const packageId = searchParams.get("package")
@@ -217,5 +232,14 @@ export default function DevCheckoutSuccessPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+// Main component that wraps the content in a Suspense boundary
+export default function DevCheckoutSuccessPage() {
+  return (
+    <Suspense fallback={<CheckoutSuccessLoading />}>
+      <CheckoutSuccessContent />
+    </Suspense>
   )
 }
