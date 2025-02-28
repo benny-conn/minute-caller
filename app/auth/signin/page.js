@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PhoneCall, Loader } from "lucide-react"
@@ -20,7 +20,22 @@ const styles = {
     "focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 focus:border-indigo-500",
 }
 
-export default function SignIn() {
+// Loading component to display while suspense is active
+function SignInLoading() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col items-center gap-4">
+        <Loader className="h-8 w-8 text-indigo-600 animate-spin" />
+        <p className="text-gray-600 dark:text-gray-400">
+          Loading sign in page...
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Component that uses useSearchParams
+function SignInContent() {
   const [error, setError] = useState(null)
   const [supabase] = useState(() => createClient())
   const [redirectUrl, setRedirectUrl] = useState("")
@@ -158,5 +173,14 @@ export default function SignIn() {
         </div>
       </footer>
     </div>
+  )
+}
+
+// Main component that wraps the content in a Suspense boundary
+export default function SignIn() {
+  return (
+    <Suspense fallback={<SignInLoading />}>
+      <SignInContent />
+    </Suspense>
   )
 }
