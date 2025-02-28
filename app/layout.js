@@ -22,6 +22,16 @@ export const metadata = {
     "Skype alternative",
     "VoIP",
     "global dialing",
+    "pay-as-you-go",
+    "international calling",
+    "international phone calls",
+    "international calling cards",
+    "international calling rates",
+    "international calling codes",
+    "international calling apps",
+    "call anywhere",
+    "call anywhere in the world",
+    "call anywhere in the world for cheap",
   ],
 }
 

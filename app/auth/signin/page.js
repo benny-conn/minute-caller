@@ -96,7 +96,7 @@ function SignInContent() {
               <PhoneCall className="h-5 w-5 text-white" />
             </div>
             <span className="text-xl font-bold">
-              <span className={styles.gradientText}>Global</span>Dial
+              <span className={styles.gradientText}>Minute</span>Caller
             </span>
           </Link>
         </div>
