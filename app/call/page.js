@@ -11,6 +11,7 @@ import {
   updateUserCredits,
 } from "@/app/lib/supabase"
 import CallInterface from "@/app/components/call/CallInterface"
+import { supabase } from "@/app/lib/supabase"
 
 // Loading component to display while suspense is active
 function CallPageLoading() {
@@ -40,18 +41,23 @@ function CallPageContent() {
   const [callResult, setCallResult] = useState(null)
 
   useEffect(() => {
+    // Ensure we have a phone number
+    if (!phoneNumber) {
+      setError("No phone number provided. Please enter a number to call.")
+      setIsLoading(false)
+      return
+    }
+
+    // Load user data
+    loadUserData()
+  }, [phoneNumber])
+
+  useEffect(() => {
     async function loadUserData() {
       setIsLoading(true)
       setError("")
 
       try {
-        // Handle missing phone number
-        if (!phoneNumber) {
-          setError("No phone number provided. Please enter a number to call.")
-          setIsLoading(false)
-          return
-        }
-
         // Get current user
         const { user, error: userError } = await getCurrentUser()
 
@@ -63,15 +69,40 @@ function CallPageContent() {
         }
 
         if (!user) {
-          // Not logged in, redirect to sign in page
-          router.push("/auth/signin")
-          return
+          console.error("No user found in getCurrentUser response")
+          // Instead of immediately redirecting, try to get the session directly
+          try {
+            const { data: sessionData } = await supabase.auth.getSession()
+            if (sessionData?.session?.user) {
+              // We have a session but getCurrentUser failed - use the session user
+              console.log("Using session user instead of getCurrentUser result")
+              setUser(sessionData.session.user)
+            } else {
+              // No session either, redirect to sign in
+              console.log("No session found, redirecting to sign in")
+              router.push(
+                "/auth/signin?next=" +
+                  encodeURIComponent("/call?number=" + phoneNumber)
+              )
+              return
+            }
+          } catch (sessionError) {
+            console.error("Error getting session:", sessionError)
+            // No session, redirect to sign in
+            router.push(
+              "/auth/signin?next=" +
+                encodeURIComponent("/call?number=" + phoneNumber)
+            )
+            return
+          }
+        } else {
+          setUser(user)
         }
 
-        setUser(user)
+        // Get user credits - use the user from session if we didn't get one from getCurrentUser
+        const userId = user?.id || sessionData?.session?.user?.id
+        const { credits, error: creditsError } = await getUserCredits(userId)
 
-        // Get user credits
-        const { credits, error: creditsError } = await getUserCredits(user.id)
         if (creditsError) {
           console.error("Error fetching credits:", creditsError)
           // Don't fail, just log the error and use 0 credits
@@ -251,6 +282,7 @@ function CallPageContent() {
             onHangUp={handleHangUp}
             userCredits={credits}
             onCallFinished={handleCallFinished}
+            user={user}
           />
         )}
       </main>

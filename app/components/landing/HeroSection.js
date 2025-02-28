@@ -28,7 +28,7 @@ export default function HeroSection() {
           <div className="flex-1 text-center lg:text-left">
             <div className="relative z-10">
               <div className="inline-block mb-3 px-4 py-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 text-sm font-medium">
-                Pay only for the minutes you use
+                Simple credit based calls
               </div>
 
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">

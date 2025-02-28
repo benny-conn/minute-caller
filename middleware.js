@@ -67,8 +67,13 @@ export async function middleware(request) {
       )
       // Include the original URL as the next parameter
       const originalPath = request.nextUrl.pathname
+      const searchParams = request.nextUrl.searchParams.toString()
+      const fullPath = searchParams
+        ? `${originalPath}?${searchParams}`
+        : originalPath
+
       const redirectUrl = new URL(
-        `/auth/signin?next=${encodeURIComponent(originalPath)}`,
+        `/auth/signin?next=${encodeURIComponent(fullPath)}`,
         request.url
       )
       return NextResponse.redirect(redirectUrl)

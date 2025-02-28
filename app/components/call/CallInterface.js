@@ -29,6 +29,8 @@ import {
   updateUserCredits,
   saveCallHistory,
 } from "@/app/lib/supabase"
+import { getCurrentUser } from "@/app/lib/supabase"
+import { supabase } from "@/app/lib/supabase"
 
 // Custom Keypad icon component since lucide-react doesn't have one
 const KeypadIcon = ({ size = 24, ...props }) => (
@@ -90,6 +92,7 @@ export default function CallInterface({
   const [errorMessage, setErrorMessage] = useState("")
   const [setupAttempts, setSetupAttempts] = useState(0)
   const [microStatus, setMicroStatus] = useState("checking")
+  const [currentUser, setCurrentUser] = useState(user)
 
   // References for Twilio device and connection
   const deviceRef = useRef(null)
@@ -101,12 +104,36 @@ export default function CallInterface({
   const countryCode = getCountryCodeFromPhoneNumber(phoneNumber)
   const callRate = getCallRate(countryCode)
 
+  // Ensure we have a user, even if not passed as a prop
+  useEffect(() => {
+    async function ensureUser() {
+      if (!currentUser) {
+        try {
+          const { user: fetchedUser } = await getCurrentUser()
+          if (fetchedUser) {
+            setCurrentUser(fetchedUser)
+          } else {
+            // Try to get user from session directly
+            const { data } = await supabase.auth.getSession()
+            if (data?.session?.user) {
+              setCurrentUser(data.session.user)
+            }
+          }
+        } catch (error) {
+          console.error("Error ensuring user:", error)
+        }
+      }
+    }
+
+    ensureUser()
+  }, [currentUser])
+
   // Load user credits on component mount
   useEffect(() => {
     async function fetchUserCredits() {
-      if (user?.id) {
+      if (currentUser?.id) {
         try {
-          const credits = await getUserCredits(user.id)
+          const credits = await getUserCredits(currentUser.id)
           setRemainingCredits(credits)
         } catch (error) {
           console.error("Error fetching user credits:", error)
@@ -123,7 +150,7 @@ export default function CallInterface({
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       handleHangUp()
     }
-  }, [user])
+  }, [currentUser])
 
   // Main call setup function with retry mechanism
   useEffect(() => {
@@ -145,102 +172,104 @@ export default function CallInterface({
 
   // Initialize call setup
   const setupCall = async () => {
-    setCallStatus("initializing")
-    setErrorMessage("")
-
     try {
-      console.log(`Call setup attempt ${setupAttempts + 1}`)
+      console.log("Setting up call...")
+      setCallStatus("initializing")
 
-      // First check if browser supports getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error(
-          "Browser doesn't support microphone access. Please try Chrome, Firefox, or Safari."
-        )
+      // Check if we have a user
+      if (!currentUser?.id) {
+        try {
+          // Try to get the user again
+          const { user: fetchedUser } = await getCurrentUser()
+          if (fetchedUser) {
+            setCurrentUser(fetchedUser)
+          } else {
+            // Try to get user from session directly
+            const { data } = await supabase.auth.getSession()
+            if (data?.session?.user) {
+              setCurrentUser(data.session.user)
+            } else {
+              // No user found, show error
+              setErrorMessage("Authentication error. Please sign in again.")
+              setCallStatus("error")
+              return
+            }
+          }
+        } catch (error) {
+          console.error("Error getting user:", error)
+          setErrorMessage("Authentication error. Please sign in again.")
+          setCallStatus("error")
+          return
+        }
       }
 
       // Check microphone permissions
-      setMicroStatus("checking")
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true })
-        setMicroStatus("granted")
-      } catch (err) {
-        console.error("Microphone permission error:", err)
-        setMicroStatus("denied")
-        throw new Error(
-          "Microphone access denied. Please enable microphone access in your browser settings."
-        )
+      const permissionResult = await checkMediaPermissions()
+      setPermissionStatus(permissionResult ? "granted" : "denied")
+      setMicroStatus(permissionResult ? "granted" : "denied")
+
+      if (!permissionResult) {
+        setErrorMessage("Microphone access is required to make calls.")
+        setCallStatus("error")
+        return
       }
 
-      // Generate token for Twilio device
-      const response = await fetch("/api/twilio/token", {
+      // Get Twilio token
+      const tokenResponse = await fetch("/api/twilio/token", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identity: user?.id || "anonymous-user" }),
+        body: JSON.stringify({ identity: currentUser?.id || "anonymous-user" }),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to obtain Twilio token")
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.json()
+        throw new Error(errorData.error || "Failed to get Twilio token")
       }
 
-      const data = await response.json()
-      const token = data.token
+      const { token } = await tokenResponse.json()
 
-      // Clean up any existing device
-      if (deviceRef.current) {
-        try {
-          deviceRef.current.destroy()
-        } catch (err) {
-          console.error("Error destroying existing device:", err)
-        }
+      if (!token) {
+        throw new Error("No token received from server")
       }
 
-      // Create a new Device instance
-      if (typeof window !== "undefined" && window.Twilio) {
-        console.log("Initializing new Twilio.Device")
-        const { Device } = window.Twilio.Device
-        deviceRef.current = new Device(token, {
-          codecPreferences: ["opus", "pcmu"],
-          enableRingingState: true,
-        })
+      // Initialize Twilio device
+      const device = await initializeTwilioDevice(token)
+      deviceRef.current = device
 
-        // Register device callbacks
-        deviceRef.current.on("ready", () => {
-          console.log("Twilio device is ready")
-          setCallStatus("ready")
+      // Set up event listeners
+      device.on("ready", () => {
+        console.log("Twilio device is ready")
+        setCallStatus("ready")
+      })
 
-          // Automatically initiate call if we have a phone number
-          if (phoneNumber) {
-            initiateOutboundCall(phoneNumber)
-          }
-        })
-
-        deviceRef.current.on("error", error => {
-          console.error("Twilio device error:", error)
-          setErrorMessage(`Call error: ${error.message || "Unknown error"}`)
-
-          // Retry setup if error occurs during initialization and we haven't exceeded retry attempts
-          if (callStatus === "initializing" && setupAttempts < 2) {
-            console.log("Retrying call setup...")
-            setSetupAttempts(prev => prev + 1)
-          } else {
-            setCallStatus("error")
-          }
-        })
-
-        // Initialize the device
-        await deviceRef.current.register()
-      } else {
-        throw new Error(
-          "Twilio library not loaded. Please refresh the page and try again."
+      device.on("error", error => {
+        console.error("Twilio device error:", error)
+        setErrorMessage(
+          error.message || "There was a problem connecting to the service."
         )
-      }
+        setCallStatus("error")
+      })
+
+      device.on("disconnect", () => {
+        console.log("Twilio device disconnected")
+        handleCallEnded()
+      })
+
+      // Set a timeout for device initialization
+      loadingTimer.current = setTimeout(() => {
+        if (callStatus === "initializing") {
+          setErrorMessage(
+            "Call setup is taking longer than expected. Please try again."
+          )
+          setCallStatus("error")
+        }
+      }, 15000) // 15 seconds timeout
     } catch (error) {
-      console.error("Call setup error:", error)
+      console.error("Error setting up call:", error)
       setErrorMessage(
-        error.message || "Failed to set up call. Please try again."
+        error.message || "There was a problem setting up the call."
       )
       setCallStatus("error")
     }
@@ -370,41 +399,54 @@ export default function CallInterface({
 
   // Function to handle call end
   const handleCallEnded = async () => {
-    console.log("Call ended")
-
-    // Stop timer
+    // Stop the timer
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
 
-    setCallStatus("disconnected")
+    // Update call status
+    setCallStatus("ended")
 
-    // If we had an active call with some duration, process it
-    if (callDuration > 0) {
+    // Calculate cost based on duration and rate
+    const finalDuration = callDuration
+    const finalCost = calculateCallCost(finalDuration, callRate)
+    const finalCreditsUsed = finalCost
+
+    // Only process credits and call history if we have a user and the call lasted more than 0 seconds
+    if (finalDuration > 0) {
       try {
-        // Round up to the nearest credit
-        const finalCreditsUsed = Math.max(1, Math.ceil(callDuration / 60))
-
-        console.log(
-          `Call ended. Duration: ${callDuration}s, Credits used: ${finalCreditsUsed}`
-        )
-
         // Deduct credits from user account
-        if (user?.id) {
+        if (currentUser?.id) {
           // Deduct credits
-          const newCreditBalance = await updateUserCredits(
-            user.id,
-            -finalCreditsUsed
-          )
-          setRemainingCredits(newCreditBalance)
+          const newCreditBalance = remainingCredits - finalCreditsUsed
+
+          // Update credits in database
+          try {
+            await updateUserCredits(currentUser.id, newCreditBalance)
+          } catch (error) {
+            console.error("Error updating credits:", error)
+          }
 
           // Save call history
-          await saveCallHistory(user.id, {
-            phone_number: phoneNumber,
-            duration: callDuration,
-            cost: finalCreditsUsed,
-            status: "completed",
+          try {
+            await saveCallHistory({
+              user_id: currentUser.id,
+              phone_number: phoneNumber,
+              duration: finalDuration,
+              cost: finalCost,
+              status: "completed",
+              created_at: new Date().toISOString(),
+            })
+          } catch (error) {
+            console.error("Error saving call history:", error)
+          }
+
+          // Call the onCallFinished callback with the result
+          onCallFinished({
+            duration: finalDuration,
+            cost: finalCost,
+            remainingCredits: newCreditBalance,
           })
         }
       } catch (error) {
@@ -412,10 +454,20 @@ export default function CallInterface({
       }
     }
 
-    // Set timeout to close modal after showing the disconnected state
-    timeoutRef.current = setTimeout(() => {
-      if (onClose) onClose()
-    }, 3000)
+    // Clean up the connection
+    if (connectionRef.current) {
+      try {
+        connectionRef.current.disconnect()
+      } catch (e) {
+        console.error("Error disconnecting call:", e)
+      }
+      connectionRef.current = null
+    }
+
+    // Notify parent component
+    if (onHangUp) {
+      onHangUp()
+    }
   }
 
   // Format the call duration display (MM:SS)
