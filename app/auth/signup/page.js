@@ -55,10 +55,7 @@ export default function SignUp() {
         setSuccess(true)
         setIsLoading(false)
 
-        // Optionally redirect after a delay
-        setTimeout(() => {
-          router.push("/dashboard")
-        }, 2000)
+        // No longer redirecting to dashboard since email confirmation is required
       } else {
         setError("Something went wrong. Please try again.")
         setIsLoading(false)
@@ -79,7 +76,7 @@ export default function SignUp() {
               <PhoneCall className="h-5 w-5 text-white" />
             </div>
             <span className="text-xl font-bold">
-              <span className={styles.gradientText}>Global</span>Dial
+              <span className={styles.gradientText}>Minute</span>Caller
             </span>
           </Link>
         </div>
@@ -117,11 +114,15 @@ export default function SignUp() {
                   Account Created!
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Your account has been created successfully. Redirecting you to
-                  the dashboard...
+                  Your account has been created successfully. Please check your
+                  email to confirm your account before signing in.
                 </p>
                 <div className="flex justify-center">
-                  <div className="w-6 h-6 border-2 border-indigo-400 border-t-indigo-600 rounded-full animate-spin"></div>
+                  <Link
+                    href="/auth/signin"
+                    className={`px-4 py-2 rounded-lg font-medium text-white ${styles.buttonGradient} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition-all`}>
+                    Go to Sign In
+                  </Link>
                 </div>
               </div>
             ) : (

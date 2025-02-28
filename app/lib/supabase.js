@@ -65,10 +65,21 @@ export const signIn = async ({ email, password }) => {
 export const signUp = async ({ email, password }) => {
   if (isDevelopmentWithNoSupabase) {
     // Return mock data for development
+    const userId = "dev-user-123"
+
+    // Add 5 initial credits for development mode
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`credits_${userId}`, "5")
+      } catch (e) {
+        console.log("Could not access localStorage")
+      }
+    }
+
     return {
       data: {
         user: {
-          id: "dev-user-123",
+          id: userId,
           email: email || "dev@example.com",
           created_at: new Date().toISOString(),
         },
@@ -81,6 +92,47 @@ export const signUp = async ({ email, password }) => {
     email,
     password,
   })
+
+  // If signup was successful, add 5 initial credits to the user
+  if (data?.user?.id && !error) {
+    try {
+      // Create a credits record with 5 initial credits
+      const { error: creditsError } = await supabase.from("credits").insert({
+        user_id: data.user.id,
+        amount: 5, // 5 initial credits
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+
+      if (creditsError) {
+        console.error("Error adding initial credits:", creditsError)
+      } else {
+        console.log("Successfully added 5 initial credits for new user")
+
+        // Record the transaction
+        try {
+          await supabase.from("transactions").insert({
+            user_id: data.user.id,
+            amount: 5,
+            type: "bonus",
+            status: "completed",
+            metadata: {
+              source: "signup_bonus",
+              description: "Initial signup bonus credits",
+            },
+            created_at: new Date().toISOString(),
+          })
+        } catch (txError) {
+          console.log(
+            "Error recording initial credits transaction (non-critical):",
+            txError
+          )
+        }
+      }
+    } catch (e) {
+      console.error("Exception adding initial credits:", e)
+    }
+  }
 
   return { data, error }
 }

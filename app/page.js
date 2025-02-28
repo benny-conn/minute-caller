@@ -225,12 +225,6 @@ export default function Home() {
                       </div>
                       <span>HD call quality</span>
                     </li>
-                    <li className="flex items-center">
-                      <div className="bg-green-100 dark:bg-green-900/30 rounded-full p-1 mr-3">
-                        <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      </div>
-                      <span>Call history</span>
-                    </li>
                   </ul>
                   <Link
                     href="/auth/signup"
@@ -271,12 +265,6 @@ export default function Home() {
                         <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                       </div>
                       <span>HD call quality</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className="bg-green-100 dark:bg-green-900/30 rounded-full p-1 mr-3">
-                        <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      </div>
-                      <span>Priority support</span>
                     </li>
                   </ul>
                   <Link
