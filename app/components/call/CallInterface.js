@@ -74,6 +74,31 @@ const styles = {
   },
 }
 
+// Add a helper component for displaying errors with a link to the debug page
+const ErrorWithDebugLink = ({ message }) => {
+  const hasDebugSuggestion = message && message.includes("/auth/debug/twilio")
+
+  if (!hasDebugSuggestion) {
+    return <p>{message}</p>
+  }
+
+  // Extract the message part before the debug suggestion
+  const mainMessage = message.split("Please visit")[0]
+
+  return (
+    <div>
+      <p>{mainMessage}</p>
+      <a
+        href="/auth/debug/twilio"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-500 hover:text-blue-700 underline mt-2 inline-block">
+        Visit Twilio Debug Page
+      </a>
+    </div>
+  )
+}
+
 export default function CallInterface({
   phoneNumber,
   onHangUp,
@@ -460,6 +485,28 @@ export default function CallInterface({
           console.log(
             "Twilio connection declined with code 31002. Check your Twilio account configuration."
           )
+
+          // Log additional details to help diagnose the issue
+          console.log("Attempting to get more details about the error:", {
+            errorName: error.name,
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorInfo: error.info || "No additional info",
+            errorStack: error.stack || "No stack trace",
+          })
+
+          // Suggest visiting the debug page
+          errorMessage +=
+            " Please visit the Twilio debug page at /auth/debug/twilio for more information."
+        } else if (error.code === 31000) {
+          errorMessage =
+            "Call error: Unable to connect to Twilio. Check your internet connection."
+        } else if (error.code === 31003) {
+          errorMessage =
+            "Call error: Twilio service is unavailable. Please try again later."
+        } else if (error.code === 31005) {
+          errorMessage =
+            "Call error: Twilio configuration issue. Please contact support."
         } else if (error.message) {
           errorMessage = `Call error: ${error.message}`
         }
@@ -469,7 +516,18 @@ export default function CallInterface({
       })
     } catch (error) {
       console.error("Error connecting call:", error)
-      setErrorMessage(`Failed to connect call: ${error.message}`)
+
+      // Provide more detailed error message
+      let errorMsg = "Failed to connect call"
+      if (error.message) {
+        errorMsg += `: ${error.message}`
+      }
+
+      // Add suggestion to check the debug page
+      errorMsg +=
+        ". Please visit the Twilio debug page at /auth/debug/twilio for more information."
+
+      setErrorMessage(errorMsg)
       setCallStatus("error")
     }
   }
@@ -861,10 +919,7 @@ export default function CallInterface({
         </div>
         <div className="p-6 text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <p className="mb-4">
-            {errorMessage ||
-              "There was a problem with your call. Please try again later."}
-          </p>
+          <ErrorWithDebugLink message={errorMessage} />
           <div className="flex flex-col gap-2">
             <button
               onClick={handleReset}
@@ -1002,9 +1057,7 @@ export default function CallInterface({
               <p className="font-medium text-red-600 dark:text-red-400">
                 Call failed
               </p>
-              <p className="text-sm text-center text-gray-600 dark:text-gray-400 mt-1 max-w-xs">
-                {errorMessage || "Something went wrong with the call."}
-              </p>
+              <ErrorWithDebugLink message={errorMessage} />
             </div>
           )}
 
