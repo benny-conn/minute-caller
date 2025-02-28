@@ -53,6 +53,26 @@ export const signIn = async ({ email, password }) => {
       console.error(`[Auth] Sign in error:`, error)
     } else {
       console.log(`[Auth] Sign in successful for user: ${data?.user?.email}`)
+
+      // Ensure cookies are properly set by getting the session
+      try {
+        console.log(`[Auth] Verifying session after sign in`)
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.error(
+            `[Auth] Error getting session after sign in:`,
+            sessionError
+          )
+        } else if (!sessionData?.session) {
+          console.error(`[Auth] No session found after sign in`)
+        } else {
+          console.log(`[Auth] Session verified after sign in`)
+        }
+      } catch (sessionErr) {
+        console.error(`[Auth] Exception verifying session:`, sessionErr)
+      }
     }
 
     return { data, error }
@@ -165,6 +185,54 @@ export const getCurrentUser = async () => {
 
     if (error) {
       console.error("[Auth] Error getting user:", error.message)
+
+      // Try to get the session as a fallback
+      console.log("[Auth] Trying to get session as fallback")
+      try {
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.error("[Auth] Error getting session:", sessionError.message)
+          return { user: null, error }
+        }
+
+        if (sessionData?.session?.user) {
+          console.log(
+            "[Auth] Found user in session:",
+            sessionData.session.user.email
+          )
+          return { user: sessionData.session.user, error: null }
+        }
+      } catch (sessionErr) {
+        console.error("[Auth] Exception getting session:", sessionErr)
+      }
+
+      // If we still don't have a user, try to refresh the session
+      console.log("[Auth] Trying to refresh session")
+      try {
+        const { data: refreshData, error: refreshError } =
+          await supabase.auth.refreshSession()
+
+        if (refreshError) {
+          console.error(
+            "[Auth] Error refreshing session:",
+            refreshError.message
+          )
+          return { user: null, error }
+        }
+
+        if (refreshData?.session?.user) {
+          console.log(
+            "[Auth] Found user after refresh:",
+            refreshData.session.user.email
+          )
+          return { user: refreshData.session.user, error: null }
+        }
+      } catch (refreshErr) {
+        console.error("[Auth] Exception refreshing session:", refreshErr)
+      }
+
       return { user: null, error }
     }
 

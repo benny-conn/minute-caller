@@ -81,14 +81,54 @@ export async function middleware(request) {
   )
 
   try {
-    // Get the session using getUser (more secure than getSession)
-    console.log(`[Middleware] Checking authentication status`)
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
+    // First try to get the session
+    console.log(`[Middleware] Checking session`)
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.getSession()
 
-    if (error || !user) {
+    if (sessionError) {
+      console.log(`[Middleware] Session error: ${sessionError.message}`)
+
+      // Try to get the user directly as a fallback
+      console.log(`[Middleware] Trying to get user directly`)
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+
+      if (userError || !userData?.user) {
+        console.log(
+          `[Middleware] No authenticated user found, redirecting to sign-in`
+        )
+
+        // Redirect to sign-in page with the current URL as the next parameter
+        const redirectUrl = new URL("/auth/signin", request.url)
+        redirectUrl.searchParams.set(
+          "next",
+          request.nextUrl.pathname + request.nextUrl.search
+        )
+
+        return NextResponse.redirect(redirectUrl)
+      }
+
+      console.log(
+        `[Middleware] User found despite session error: ${userData.user.email}`
+      )
+    } else if (!sessionData?.session) {
+      console.log(`[Middleware] No session found, redirecting to sign-in`)
+
+      // Redirect to sign-in page with the current URL as the next parameter
+      const redirectUrl = new URL("/auth/signin", request.url)
+      redirectUrl.searchParams.set(
+        "next",
+        request.nextUrl.pathname + request.nextUrl.search
+      )
+
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    // At this point we have either a valid session or a valid user
+    const session = sessionData?.session
+    const user = session?.user || (await supabase.auth.getUser()).data?.user
+
+    if (!user) {
       console.log(
         `[Middleware] No authenticated user found, redirecting to sign-in`
       )
@@ -106,24 +146,21 @@ export async function middleware(request) {
     console.log(`[Middleware] User authenticated: ${user.email}`)
 
     // Try to refresh the session if it's about to expire
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const session = sessionData?.session
+    if (session) {
+      const expiresAt = session.expires_at * 1000 // Convert to milliseconds
+      const now = Date.now()
+      const timeUntilExpiry = expiresAt - now
 
-      if (session) {
-        const expiresAt = session.expires_at * 1000 // Convert to milliseconds
-        const now = Date.now()
-        const timeUntilExpiry = expiresAt - now
+      console.log(
+        `[Middleware] Session expires in: ${Math.floor(
+          timeUntilExpiry / 1000 / 60
+        )} minutes`
+      )
 
-        console.log(
-          `[Middleware] Session expires in: ${Math.floor(
-            timeUntilExpiry / 1000 / 60
-          )} minutes`
-        )
-
-        // If session expires in less than 10 minutes, refresh it
-        if (timeUntilExpiry < 10 * 60 * 1000) {
-          console.log(`[Middleware] Session expiring soon, refreshing`)
+      // If session expires in less than 10 minutes, refresh it
+      if (timeUntilExpiry < 10 * 60 * 1000) {
+        console.log(`[Middleware] Session expiring soon, refreshing`)
+        try {
           const { data: refreshData, error: refreshError } =
             await supabase.auth.refreshSession()
 
@@ -133,12 +170,23 @@ export async function middleware(request) {
             console.log(
               `[Middleware] Failed to refresh session: ${refreshError.message}`
             )
+
+            // If refresh fails but we still have a valid session, continue
+            if (timeUntilExpiry > 0) {
+              console.log(
+                `[Middleware] Using existing session despite refresh failure`
+              )
+            }
           }
+        } catch (refreshError) {
+          console.error(
+            `[Middleware] Error refreshing session: ${refreshError.message}`
+          )
         }
       }
-    } catch (sessionError) {
-      console.error(
-        `[Middleware] Error checking session: ${sessionError.message}`
+    } else {
+      console.log(
+        `[Middleware] No session to refresh, but user is authenticated`
       )
     }
 

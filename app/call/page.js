@@ -101,6 +101,18 @@ function CallPageContent() {
             )
           } else {
             console.log("[Call] Session refresh failed:", refreshError.message)
+
+            // If refresh fails with 403 Forbidden, try to get the session first
+            if (refreshError.status === 403) {
+              console.log("[Call] Getting current session after 403 error")
+              const { data: sessionData } = await supabase.auth.getSession()
+
+              if (sessionData?.session) {
+                console.log("[Call] Session exists despite refresh error")
+              } else {
+                console.log("[Call] No valid session found after refresh error")
+              }
+            }
           }
         } catch (refreshErr) {
           console.error("[Call] Error refreshing session:", refreshErr)
@@ -111,11 +123,52 @@ function CallPageContent() {
       console.log("[Call] Getting user with supabase.auth.getUser()...")
       const { data: userData, error: userError } = await supabase.auth.getUser()
 
-      if (userError || !userData?.user) {
-        console.error(
-          "[Call] Authentication failed:",
-          userError?.message || "No user found"
-        )
+      if (userError) {
+        console.error("[Call] Authentication error:", userError.message)
+
+        // Try to get the session as a fallback
+        console.log("[Call] Trying to get session as fallback...")
+        const { data: sessionData } = await supabase.auth.getSession()
+
+        if (sessionData?.session?.user) {
+          console.log(
+            "[Call] Found user in session:",
+            sessionData.session.user.email
+          )
+          setUser(sessionData.session.user)
+
+          // Get user credits
+          const { credits, error: creditsError } = await getUserCredits(
+            sessionData.session.user.id
+          )
+          if (creditsError) {
+            console.error("[Call] Error fetching credits:", creditsError)
+          }
+
+          // Ensure we have a valid credits value
+          setCredits(credits || 100) // Use 100 as default in case of errors
+          setIsLoading(false)
+          return
+        }
+
+        // If we still don't have a user, redirect to sign in
+        setError("Authentication error. Please sign in again.")
+
+        // Add a small delay before redirecting to prevent immediate redirect loops
+        setTimeout(() => {
+          router.push(
+            `/auth/signin?next=${encodeURIComponent(
+              "/call?number=" + phoneNumber
+            )}`
+          )
+        }, 1000)
+
+        setIsLoading(false)
+        return
+      }
+
+      if (!userData?.user) {
+        console.error("[Call] No user found")
         setError("Authentication error. Please sign in again.")
 
         // Add a small delay before redirecting to prevent immediate redirect loops
@@ -140,14 +193,14 @@ function CallPageContent() {
       const { credits, error: creditsError } = await getUserCredits(user.id)
 
       if (creditsError) {
-        console.error("Error fetching credits:", creditsError)
+        console.error("[Call] Error fetching credits:", creditsError)
         // Don't fail, just log the error and use 0 credits
       }
 
       // Ensure we have a valid credits value
       setCredits(credits || 100) // Use 100 as default in case of errors
     } catch (error) {
-      console.error("Error loading user data:", error)
+      console.error("[Call] Error loading user data:", error)
       // Don't show errors in development mode
       if (process.env.NODE_ENV !== "development") {
         setError("An unexpected error occurred. Please try again.")
