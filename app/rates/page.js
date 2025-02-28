@@ -8,6 +8,7 @@ import {
   getAllContinents,
   getCountriesByContinent,
 } from "@/app/lib/countryRates"
+import Footer from "@/app/components/Footer"
 
 // Custom styles
 const styles = {
@@ -242,13 +243,7 @@ export default function RatesPage() {
         </div>
       </main>
 
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 py-6 mt-10">
-        <div className="container mx-auto px-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          <p>
-            &copy; {new Date().getFullYear()} MinuteCaller. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

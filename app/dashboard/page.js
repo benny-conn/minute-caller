@@ -30,6 +30,7 @@ import {
 } from "@/app/lib/stripe"
 import { useSearchParams } from "next/navigation"
 import CountryRateCalculator from "@/app/components/CountryRateCalculator"
+import Footer from "@/app/components/Footer"
 
 // Add a custom style block
 const styles = {
@@ -785,13 +786,7 @@ function DashboardContent() {
         )}
       </main>
 
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 py-6 mt-10">
-        <div className="container mx-auto px-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          <p>
-            &copy; {new Date().getFullYear()} MinuteCaller. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }
