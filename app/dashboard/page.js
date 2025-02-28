@@ -2,7 +2,15 @@
 
 import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
-import { PhoneCall, History, User, CreditCard, LogOut, Zap } from "lucide-react"
+import {
+  PhoneCall,
+  History,
+  User,
+  CreditCard,
+  LogOut,
+  Zap,
+  DollarSign,
+} from "lucide-react"
 import {
   getCurrentUser,
   getUserCredits,
@@ -21,6 +29,7 @@ import {
   getCreditPackageById,
 } from "@/app/lib/stripe"
 import { useSearchParams } from "next/navigation"
+import CountryRateCalculator from "@/app/components/CountryRateCalculator"
 
 // Add a custom style block
 const styles = {
@@ -117,10 +126,10 @@ function DashboardContent() {
       }
 
       // Get call history
-      const { history, error: historyError } = await getUserCallHistory(user.id)
+      const { calls, error: historyError } = await getUserCallHistory(user.id)
 
       if (!historyError) {
-        setCallHistory(history || [])
+        setCallHistory(calls || [])
       } else {
         console.error("Error fetching call history:", historyError)
       }
@@ -360,6 +369,18 @@ function DashboardContent() {
 
                 <button
                   type="button"
+                  onClick={() => setActiveTab("rates")}
+                  className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-colors ${
+                    activeTab === "rates"
+                      ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  }`}>
+                  <DollarSign className="h-4 w-4" />
+                  <span>Rates</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveTab("history")}
                   className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-colors ${
                     activeTab === "history"
@@ -449,11 +470,106 @@ function DashboardContent() {
                   </div>
                 )}
 
+                {activeTab === "rates" && (
+                  <div>
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+                        International Call Rates
+                      </h3>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-lg">
+                        <span className="font-medium text-indigo-600 dark:text-indigo-400">
+                          {credits}
+                        </span>{" "}
+                        credits available
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <CountryRateCalculator
+                          maxResults={10}
+                          showAllRatesLink={false}
+                        />
+                      </div>
+
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-6 border border-indigo-100 dark:border-indigo-800/30">
+                        <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+                          About Our Rates
+                        </h4>
+
+                        <div className="space-y-4">
+                          <div>
+                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              How credits work
+                            </h5>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Credits are deducted from your account based on
+                              the per-minute rate for each country. For example,
+                              calling the UK costs 1.2 credits per minute.
+                            </p>
+                          </div>
+
+                          <div>
+                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Billing increments
+                            </h5>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Calls are billed in 60-second increments. Partial
+                              minutes are rounded up to the next full minute.
+                            </p>
+                          </div>
+
+                          <div>
+                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Credit expiration
+                            </h5>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Your credits never expire and can be used at any
+                              time.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-6">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("credits")}
+                            className={`${styles.buttonGradient} text-white py-2.5 px-4 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition-all w-full`}>
+                            Buy More Credits
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {activeTab === "history" && (
                   <div>
-                    <h3 className="text-xl font-semibold mb-6 text-gray-800 dark:text-gray-200">
-                      Your Call History
-                    </h3>
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+                        Your Call History
+                      </h3>
+                      <button
+                        onClick={loadUserData}
+                        className="px-3 py-1.5 text-sm bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:hover:bg-indigo-800/40 text-indigo-700 dark:text-indigo-300 rounded-md flex items-center gap-1.5 transition-colors">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round">
+                          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                          <path d="M21 3v5h-5"></path>
+                          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                          <path d="M8 16H3v5"></path>
+                        </svg>
+                        Refresh
+                      </button>
+                    </div>
 
                     {callHistory.length === 0 ? (
                       <div className="text-center py-12 rounded-xl bg-gray-50 dark:bg-gray-700/30">

@@ -246,17 +246,29 @@ export async function getUserCredits(userId) {
 export async function updateUserCredits(userId, newAmount) {
   try {
     if (!userId) {
+      console.error("updateUserCredits: User ID is required")
       return { success: false, error: "User ID is required" }
     }
 
+    // Validate newAmount is a number
+    if (typeof newAmount !== "number" || isNaN(newAmount)) {
+      console.error("updateUserCredits: Invalid credit amount:", newAmount)
+      return { success: false, error: "Credit amount must be a valid number" }
+    }
+
+    // Ensure newAmount is not negative
+    const validAmount = Math.max(0, newAmount)
+
+    console.log(`Updating credits for user ${userId} to ${validAmount}`)
+
     // For development mode with no Supabase credentials
     if (isDevelopmentWithNoSupabase) {
-      console.log(`[DEV] Updated credits for user ${userId} to ${newAmount}`)
+      console.log(`[DEV] Updated credits for user ${userId} to ${validAmount}`)
 
       // In true development with no Supabase, we'll use localStorage if available
       if (typeof window !== "undefined") {
         try {
-          localStorage.setItem(`credits_${userId}`, newAmount.toString())
+          localStorage.setItem(`credits_${userId}`, validAmount.toString())
         } catch (e) {
           console.log("Could not access localStorage")
         }
@@ -269,7 +281,7 @@ export async function updateUserCredits(userId, newAmount) {
       // Check if user has a credit record
       const { data: existingRecord, error: checkError } = await supabase
         .from("credits")
-        .select("id")
+        .select("id, amount")
         .eq("user_id", userId)
         .single()
 
@@ -278,7 +290,6 @@ export async function updateUserCredits(userId, newAmount) {
         console.log("Credits table does not exist - trying to create it")
 
         // Try to create credits table using SQL - note: this requires admin privileges
-        // In a real app, you'd pre-create this table in a migration
         try {
           const { error: createTableError } = await supabase.rpc(
             "create_credits_table"
@@ -294,7 +305,7 @@ export async function updateUserCredits(userId, newAmount) {
         // Try to insert after table creation
         const { error: insertError } = await supabase.from("credits").insert({
           user_id: userId,
-          amount: newAmount,
+          amount: validAmount,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -308,12 +319,16 @@ export async function updateUserCredits(userId, newAmount) {
       }
 
       let error
+      let previousAmount = 0
 
       if (existingRecord) {
+        // Store previous amount for transaction record
+        previousAmount = existingRecord.amount || 0
+
         // Update existing record
         const { error: updateError } = await supabase
           .from("credits")
-          .update({ amount: newAmount, updated_at: new Date().toISOString() })
+          .update({ amount: validAmount, updated_at: new Date().toISOString() })
           .eq("user_id", userId)
 
         error = updateError
@@ -321,7 +336,7 @@ export async function updateUserCredits(userId, newAmount) {
         // Create new record
         const { error: insertError } = await supabase.from("credits").insert({
           user_id: userId,
-          amount: newAmount,
+          amount: validAmount,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -340,12 +355,12 @@ export async function updateUserCredits(userId, newAmount) {
           .from("transactions")
           .insert({
             user_id: userId,
-            amount: newAmount,
-            type: "purchase",
+            amount: validAmount,
+            type: "update",
             status: "completed",
             metadata: {
-              previous_balance: existingRecord ? existingRecord.amount : 0,
-              new_balance: newAmount,
+              previous_balance: previousAmount,
+              new_balance: validAmount,
               source: "credit_update",
             },
             created_at: new Date().toISOString(),
@@ -378,8 +393,17 @@ export async function updateUserCredits(userId, newAmount) {
 
 // Call history functions
 export const saveCallHistory = async callData => {
+  // Validate required fields
+  if (!callData || !callData.user_id || !callData.phone_number) {
+    console.error("Missing required fields for call history:", callData)
+    return {
+      data: null,
+      error: "Missing required fields for call history",
+    }
+  }
+
   // For development mode or when Supabase is not configured
-  if (isDevelopmentWithNoSupabase || process.env.NODE_ENV === "development") {
+  if (isDevelopmentWithNoSupabase) {
     console.log("[DEV] Call history saved:", callData)
     return {
       data: [{ id: "mock-call-" + Date.now(), ...callData }],
@@ -388,42 +412,68 @@ export const saveCallHistory = async callData => {
   }
 
   try {
+    // First check if the table exists
+    const { error: tableCheckError } = await supabase
+      .from("call_history")
+      .select("id")
+      .limit(1)
+
+    // Handle table doesn't exist error
+    if (tableCheckError && tableCheckError.message.includes("does not exist")) {
+      console.log("Call history table does not exist - attempting to create it")
+
+      try {
+        // Try to create call_history table using SQL - requires admin privileges
+        const { error: createTableError } = await supabase.rpc(
+          "create_call_history_table"
+        )
+
+        if (createTableError) {
+          console.error(
+            "Could not create call_history table:",
+            createTableError
+          )
+          return {
+            data: null,
+            error: "Database not properly set up for call history",
+          }
+        }
+      } catch (e) {
+        console.error("Exception creating call_history table:", e)
+      }
+    }
+
+    // Now insert the call history record
     const { data, error } = await supabase
       .from("call_history")
       .insert([callData])
       .select()
 
-    // Handle table doesn't exist error
-    if (error && error.message.includes("does not exist")) {
-      console.log("Call history table does not exist yet")
-      return {
-        data: [{ id: "mock-call-" + Date.now(), ...callData }],
-        error: null,
-      }
+    if (error) {
+      console.error("Error inserting call history:", error)
+      return { data: null, error: error.message }
     }
 
-    return { data, error }
+    return { data, error: null }
   } catch (error) {
     console.error("Error saving call history:", error)
-    // In development, don't break the app
-    if (process.env.NODE_ENV === "development") {
-      return {
-        data: [{ id: "mock-call-" + Date.now(), ...callData }],
-        error: null,
-      }
-    }
     return { data: null, error: "Failed to save call history" }
   }
 }
 
 export const getUserCallHistory = async userId => {
+  console.log("getUserCallHistory called for user:", userId)
+
   // For development mode or when Supabase is not configured
   if (isDevelopmentWithNoSupabase) {
     console.log("[DEV] Returning mock call history for user:", userId)
-    return mockCallHistory(userId)
+    const mockData = mockCallHistory(userId)
+    console.log("Mock call history data:", mockData)
+    return mockData
   }
 
   try {
+    console.log("Fetching call history from Supabase for user:", userId)
     const { data, error } = await supabase
       .from("call_history")
       .select("*")
@@ -433,25 +483,32 @@ export const getUserCallHistory = async userId => {
     // Handle table doesn't exist error
     if (error && error.message.includes("does not exist")) {
       console.log("Call history table does not exist yet - using mock data")
-      return mockCallHistory(userId)
+      const mockData = mockCallHistory(userId)
+      console.log("Mock call history data (table doesn't exist):", mockData)
+      return mockData
     }
 
     if (error) {
       console.error("Error fetching call history:", error)
       // In development, return mock data instead of error
       if (process.env.NODE_ENV === "development") {
-        return mockCallHistory(userId)
+        const mockData = mockCallHistory(userId)
+        console.log("Mock call history data (after error):", mockData)
+        return mockData
       }
       return { calls: [], error }
     }
 
+    console.log("Call history data from Supabase:", data)
     // Make sure we're returning properly structured data
     return { calls: data || [], error: null }
   } catch (error) {
     console.error("Exception in getUserCallHistory:", error)
     // In development, don't break the app
     if (process.env.NODE_ENV === "development") {
-      return mockCallHistory(userId)
+      const mockData = mockCallHistory(userId)
+      console.log("Mock call history data (after exception):", mockData)
+      return mockData
     }
     return { calls: [], error: "Failed to fetch call history" }
   }

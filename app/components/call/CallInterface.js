@@ -83,7 +83,7 @@ export default function CallInterface({
   user,
 }) {
   const [callStatus, setCallStatus] = useState("initializing") // initializing, connecting, active, ended, error
-  const [permissionStatus, setPermissionStatus] = useState("pending") // pending, granted, denied
+  const [permissionStatus, setPermissionStatus] = useState("checking")
   const [isMuted, setIsMuted] = useState(false)
   const [isKeypadOpen, setIsKeypadOpen] = useState(false)
   const [isVolumeMuted, setIsVolumeMuted] = useState(false)
@@ -91,14 +91,15 @@ export default function CallInterface({
   const [remainingCredits, setRemainingCredits] = useState(userCredits)
   const [errorMessage, setErrorMessage] = useState("")
   const [setupAttempts, setSetupAttempts] = useState(0)
-  const [microStatus, setMicroStatus] = useState("checking")
+  const [microStatus, setMicroStatus] = useState("pending")
   const [currentUser, setCurrentUser] = useState(user)
+  const [callHistorySaved, setCallHistorySaved] = useState(false)
 
   // References for Twilio device and connection
   const deviceRef = useRef(null)
   const connectionRef = useRef(null)
-  const timerRef = useRef(null)
-  const loadingTimer = useRef(null)
+  const callTimerRef = useRef(null)
+
   const timeoutRef = useRef(null)
 
   const countryCode = getCountryCodeFromPhoneNumber(phoneNumber)
@@ -109,65 +110,35 @@ export default function CallInterface({
     async function ensureUser() {
       if (!currentUser) {
         try {
-          console.log("Fetching user in CallInterface component")
           const { user: fetchedUser } = await getCurrentUser()
           if (fetchedUser) {
-            console.log("User found via getCurrentUser:", fetchedUser.id)
             setCurrentUser(fetchedUser)
           } else {
             // Try to get user from session directly
             const { data } = await supabase.auth.getSession()
             if (data?.session?.user) {
-              console.log("User found via session:", data.session.user.id)
               setCurrentUser(data.session.user)
-            } else {
-              console.error("No user found in session or getCurrentUser")
-              setErrorMessage("Authentication error. Please sign in again.")
-              setCallStatus("error")
             }
           }
         } catch (error) {
           console.error("Error ensuring user:", error)
-          setErrorMessage("Authentication error. Please try signing in again.")
-          setCallStatus("error")
         }
-      } else {
-        console.log("User already provided as prop:", currentUser.id)
       }
     }
 
     ensureUser()
   }, [currentUser])
 
-  // Update currentUser when user prop changes
-  useEffect(() => {
-    if (user && (!currentUser || user.id !== currentUser.id)) {
-      console.log("Updating currentUser from prop:", user.id)
-      setCurrentUser(user)
-    }
-  }, [user, currentUser])
-
   // Load user credits on component mount
   useEffect(() => {
     async function fetchUserCredits() {
       if (currentUser?.id) {
         try {
-          console.log("Fetching credits for user:", currentUser.id)
-          const { credits } = await getUserCredits(currentUser.id)
-          if (credits !== undefined) {
-            setRemainingCredits(credits)
-          } else {
-            // Use the credits passed as prop if API call fails
-            setRemainingCredits(userCredits)
-          }
+          const credits = await getUserCredits(currentUser.id)
+          setRemainingCredits(credits)
         } catch (error) {
           console.error("Error fetching user credits:", error)
-          // Fallback to prop value
-          setRemainingCredits(userCredits)
         }
-      } else {
-        // Use the credits passed as prop if no user
-        setRemainingCredits(userCredits)
       }
     }
 
@@ -175,12 +146,11 @@ export default function CallInterface({
 
     // Cleanup on unmount
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-      if (loadingTimer.current) clearTimeout(loadingTimer.current)
+      if (callTimerRef.current) clearInterval(callTimerRef.current)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       handleHangUp()
     }
-  }, [currentUser, userCredits])
+  }, [currentUser])
 
   // Main call setup function with retry mechanism
   useEffect(() => {
@@ -209,40 +179,42 @@ export default function CallInterface({
       // Check if we have a user
       if (!currentUser?.id) {
         try {
-          console.log("No user found, attempting to get user again")
           // Try to get the user again
           const { user: fetchedUser } = await getCurrentUser()
           if (fetchedUser) {
-            console.log(
-              "User found via getCurrentUser in setupCall:",
-              fetchedUser.id
-            )
             setCurrentUser(fetchedUser)
           } else {
             // Try to get user from session directly
             const { data } = await supabase.auth.getSession()
             if (data?.session?.user) {
-              console.log(
-                "User found via session in setupCall:",
-                data.session.user.id
-              )
               setCurrentUser(data.session.user)
             } else {
               // No user found, show error
-              console.error("No user found in setupCall")
               setErrorMessage("Authentication error. Please sign in again.")
               setCallStatus("error")
               return
             }
           }
         } catch (error) {
-          console.error("Error getting user in setupCall:", error)
-          setErrorMessage("Authentication error. Please sign in again.")
-          setCallStatus("error")
-          return
+          console.error("Error getting user:", error)
+
+          // Try to get user from session as a fallback
+          try {
+            const { data } = await supabase.auth.getSession()
+            if (data?.session?.user) {
+              setCurrentUser(data.session.user)
+            } else {
+              setErrorMessage("Authentication error. Please sign in again.")
+              setCallStatus("error")
+              return
+            }
+          } catch (sessionError) {
+            console.error("Error getting session:", sessionError)
+            setErrorMessage("Authentication error. Please sign in again.")
+            setCallStatus("error")
+            return
+          }
         }
-      } else {
-        console.log("Using existing user in setupCall:", currentUser.id)
       }
 
       // Check microphone permissions
@@ -262,11 +234,7 @@ export default function CallInterface({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          identity: currentUser?.id || "anonymous-user",
-          // Include a timestamp to prevent caching issues
-          timestamp: new Date().getTime(),
-        }),
+        body: JSON.stringify({ identity: currentUser?.id || "anonymous-user" }),
       })
 
       if (!tokenResponse.ok) {
@@ -280,19 +248,34 @@ export default function CallInterface({
         throw new Error("No token received from server")
       }
 
-      console.log("Twilio token received, initializing device")
-
       // Initialize Twilio device
-      const device = await initializeTwilioDevice(token)
-      deviceRef.current = device
+      console.log("Initializing Twilio device with token...")
+      const deviceResult = await initializeTwilioDevice(token)
+
+      if (deviceResult.error) {
+        console.error("Error initializing Twilio device:", deviceResult.error)
+        throw new Error(
+          deviceResult.error || "Failed to initialize Twilio device"
+        )
+      }
+
+      if (!deviceResult.device) {
+        console.error("No device returned from initializeTwilioDevice")
+        throw new Error(
+          "Failed to initialize Twilio device - no device returned"
+        )
+      }
+
+      deviceRef.current = deviceResult.device
+      console.log("Twilio device initialized successfully")
 
       // Set up event listeners
-      device.on("ready", () => {
+      deviceRef.current.on("ready", () => {
         console.log("Twilio device is ready")
         setCallStatus("ready")
       })
 
-      device.on("error", error => {
+      deviceRef.current.on("error", error => {
         console.error("Twilio device error:", error)
         setErrorMessage(
           error.message || "There was a problem connecting to the service."
@@ -300,20 +283,10 @@ export default function CallInterface({
         setCallStatus("error")
       })
 
-      device.on("disconnect", () => {
+      deviceRef.current.on("disconnect", () => {
         console.log("Twilio device disconnected")
         handleCallEnded()
       })
-
-      // Set a timeout for device initialization
-      loadingTimer.current = setTimeout(() => {
-        if (callStatus === "initializing") {
-          setErrorMessage(
-            "Call setup is taking longer than expected. Please try again."
-          )
-          setCallStatus("error")
-        }
-      }, 15000) // 15 seconds timeout
     } catch (error) {
       console.error("Error setting up call:", error)
       setErrorMessage(
@@ -325,14 +298,23 @@ export default function CallInterface({
 
   // Function to initiate an outbound call
   const initiateOutboundCall = number => {
-    if (
-      !deviceRef.current ||
-      callStatus === "connecting" ||
-      callStatus === "connected"
-    ) {
-      console.log(
-        "Cannot initiate call: device not ready or call already in progress"
-      )
+    if (!deviceRef.current) {
+      console.error("Cannot initiate call: Twilio device not initialized")
+      setErrorMessage("Call setup incomplete. Please try again.")
+      setCallStatus("error")
+      return
+    }
+
+    if (callStatus === "connecting" || callStatus === "connected") {
+      console.log("Cannot initiate call: call already in progress")
+      return
+    }
+
+    // Ensure we have a user before initiating the call
+    if (!currentUser?.id) {
+      console.error("Cannot initiate call: no authenticated user")
+      setErrorMessage("Authentication required. Please sign in again.")
+      setCallStatus("error")
       return
     }
 
@@ -347,6 +329,24 @@ export default function CallInterface({
     console.log(`Initiating call to: ${formattedNumber}`)
     setCallStatus("connecting")
 
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    // Set a timeout for call connection
+    timeoutRef.current = setTimeout(() => {
+      if (callStatus === "connecting" || callStatus === "ringing") {
+        console.log("Call connection timed out")
+        setErrorMessage(
+          "Call connection timed out. The recipient may not have answered."
+        )
+        handleHangUp()
+        setCallStatus("error")
+      }
+    }, 60000) // 60 seconds timeout for call connection
+
     try {
       // Get outgoing call parameters
       const params = {
@@ -356,7 +356,13 @@ export default function CallInterface({
       }
 
       console.log("Call params:", params)
+
+      // Connect using the device reference
       connectionRef.current = deviceRef.current.connect(params)
+
+      if (!connectionRef.current) {
+        throw new Error("Failed to establish connection")
+      }
 
       // Monitor call states
       connectionRef.current.on("ringing", () => {
@@ -364,8 +370,35 @@ export default function CallInterface({
         setCallStatus("ringing")
       })
 
+      // Handle both "accept" and "accepted" events (different Twilio versions use different event names)
       connectionRef.current.on("accept", () => {
-        console.log("Call accepted")
+        console.log("Call accepted - transitioning to connected state")
+
+        // Clear the connection timeout since the call was accepted
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
+        // Force state update to connected
+        setCallStatus("connected")
+
+        // Start timing the call
+        startCallTimer()
+      })
+
+      connectionRef.current.on("accepted", () => {
+        console.log(
+          "Call accepted (via 'accepted' event) - transitioning to connected state"
+        )
+
+        // Clear the connection timeout since the call was accepted
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
+        // Force state update to connected
         setCallStatus("connected")
 
         // Start timing the call
@@ -374,23 +407,64 @@ export default function CallInterface({
 
       connectionRef.current.on("disconnect", () => {
         console.log("Call disconnected")
+
+        // Clear the connection timeout
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
         handleCallEnded()
       })
 
       connectionRef.current.on("cancel", () => {
         console.log("Call was canceled")
+
+        // Clear the connection timeout
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
         handleCallEnded()
       })
 
       connectionRef.current.on("reject", () => {
         console.log("Call was rejected")
+
+        // Clear the connection timeout
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
         setErrorMessage("Call was rejected")
         handleCallEnded()
       })
 
       connectionRef.current.on("error", error => {
         console.error("Connection error:", error)
-        setErrorMessage(`Call error: ${error.message || "Connection failed"}`)
+
+        // Clear the connection timeout
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
+        // Handle specific Twilio error codes
+        let errorMessage = "Call error: Connection failed"
+
+        if (error.code === 31002) {
+          errorMessage =
+            "Call declined. This could be due to insufficient Twilio credits or account restrictions."
+          console.log(
+            "Twilio connection declined with code 31002. Check your Twilio account configuration."
+          )
+        } else if (error.message) {
+          errorMessage = `Call error: ${error.message}`
+        }
+
+        setErrorMessage(errorMessage)
         handleCallEnded()
       })
     } catch (error) {
@@ -402,57 +476,52 @@ export default function CallInterface({
 
   // Start timer for call duration
   const startCallTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current)
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current)
+      callTimerRef.current = null
+    }
 
+    // Reset call duration
     setCallDuration(0)
     const startTime = Date.now()
 
-    timerRef.current = setInterval(() => {
+    console.log(
+      "Starting call timer with rate:",
+      callRate,
+      "credits per minute"
+    )
+
+    callTimerRef.current = setInterval(() => {
+      // Calculate duration in seconds
       const duration = Math.floor((Date.now() - startTime) / 1000)
+
+      // Update the duration state
       setCallDuration(duration)
 
-      // Calculate credits used (1 credit per minute)
+      // Calculate credits used based on duration and rate
       const minutesUsed = duration / 60
-      const credits = Math.ceil(minutesUsed * callRate)
-      setRemainingCredits(prev => Math.max(0, prev - credits))
+      const creditsUsed = Math.ceil(minutesUsed * callRate)
+
+      // Calculate remaining credits
+      const newRemainingCredits = Math.max(0, userCredits - creditsUsed)
+
+      // Update remaining credits state
+      setRemainingCredits(newRemainingCredits)
+
+      // Log every 10 seconds for debugging
+      if (duration % 10 === 0) {
+        console.log(
+          `Call in progress: ${duration}s, used ${creditsUsed} credits, remaining: ${newRemainingCredits}`
+        )
+      }
 
       // Check if user has enough credits to continue
-      if (userCredits > 0 && credits >= userCredits) {
-        console.warn("User running out of credits")
+      if (userCredits > 0 && newRemainingCredits <= 0) {
+        console.warn("User out of credits, ending call")
+        handleHangUp()
       }
     }, 1000)
   }
-
-  // Initialize call timer when call becomes active
-  useEffect(() => {
-    let intervalId
-
-    if (callStatus === "active") {
-      intervalId = setInterval(() => {
-        setCallDuration(prev => {
-          const newDuration = prev + 1
-
-          // Calculate remaining credits
-          const cost = calculateCallCost(newDuration, callRate)
-          const newRemainingCredits = userCredits - cost
-          setRemainingCredits(newRemainingCredits)
-
-          // Auto-end call if credits run out
-          if (newRemainingCredits <= 0) {
-            handleHangUp()
-          }
-
-          return newDuration
-        })
-      }, 1000)
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-    }
-  }, [callStatus, userCredits, callRate])
 
   // Handle call hangup
   const handleHangUp = () => {
@@ -478,10 +547,12 @@ export default function CallInterface({
 
   // Function to handle call end
   const handleCallEnded = async () => {
+    console.log("Handling call ended, current status:", callStatus)
+
     // Stop the timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current)
+      callTimerRef.current = null
     }
 
     // Update call status
@@ -493,7 +564,11 @@ export default function CallInterface({
     const finalCreditsUsed = finalCost
 
     console.log(
-      `Call ended - Duration: ${finalDuration}s, Cost: ${finalCost} credits`
+      "Call ended with duration:",
+      finalDuration,
+      "seconds, cost:",
+      finalCost,
+      "credits"
     )
 
     // Only process credits and call history if we have a user and the call lasted more than 0 seconds
@@ -501,14 +576,24 @@ export default function CallInterface({
       try {
         // Deduct credits from user account
         if (currentUser?.id) {
-          console.log(`Processing call end for user: ${currentUser.id}`)
+          // Ensure we have a valid remaining credits value
+          const currentRemainingCredits =
+            typeof remainingCredits === "number"
+              ? remainingCredits
+              : userCredits
 
-          // Deduct credits
+          // Calculate new balance, ensuring it's not negative
           const newCreditBalance = Math.max(
             0,
-            remainingCredits - finalCreditsUsed
+            currentRemainingCredits - finalCreditsUsed
           )
-          console.log(`New credit balance: ${newCreditBalance}`)
+
+          console.log("Updating credits:", {
+            userId: currentUser.id,
+            oldBalance: currentRemainingCredits,
+            used: finalCreditsUsed,
+            newBalance: newCreditBalance,
+          })
 
           // Update credits in database
           try {
@@ -516,8 +601,8 @@ export default function CallInterface({
               currentUser.id,
               newCreditBalance
             )
-            if (updateResult.error) {
-              console.error("Error updating credits:", updateResult.error)
+            if (!updateResult.success) {
+              console.error("Failed to update credits:", updateResult.error)
             } else {
               console.log("Credits updated successfully")
             }
@@ -525,27 +610,35 @@ export default function CallInterface({
             console.error("Error updating credits:", error)
           }
 
-          // Save call history
-          try {
-            const callHistoryData = {
-              user_id: currentUser.id,
-              phone_number: phoneNumber,
-              duration: finalDuration,
-              cost: finalCost,
-              status: "completed",
-              created_at: new Date().toISOString(),
-            }
+          // Save call history - only if not already saved
+          if (!callHistorySaved) {
+            try {
+              const callHistoryData = {
+                user_id: currentUser.id,
+                phone_number: phoneNumber,
+                duration: finalDuration,
+                cost: finalCost,
+                status: "completed",
+                created_at: new Date().toISOString(),
+              }
 
-            console.log("Saving call history:", callHistoryData)
-            const saveResult = await saveCallHistory(callHistoryData)
+              console.log("Saving call history:", callHistoryData)
 
-            if (saveResult.error) {
-              console.error("Error saving call history:", saveResult.error)
-            } else {
-              console.log("Call history saved successfully")
+              const historyResult = await saveCallHistory(callHistoryData)
+              if (historyResult.error) {
+                console.error(
+                  "Failed to save call history:",
+                  historyResult.error
+                )
+              } else {
+                console.log("Call history saved successfully")
+                setCallHistorySaved(true) // Mark as saved to prevent duplicates
+              }
+            } catch (error) {
+              console.error("Error saving call history:", error)
             }
-          } catch (error) {
-            console.error("Error saving call history:", error)
+          } else {
+            console.log("Call history already saved, skipping")
           }
 
           // Call the onCallFinished callback with the result
@@ -554,26 +647,28 @@ export default function CallInterface({
             cost: finalCost,
             remainingCredits: newCreditBalance,
           })
+
+          // Automatically redirect to dashboard after a short delay
+          // This eliminates the need for the user to click "Close"
+          setTimeout(() => {
+            handleClose()
+          }, 2000) // 2 second delay to show the call ended screen briefly
         } else {
-          console.warn("No user ID available to save call history")
-          // Still call the callback with the result even if we couldn't save to the database
-          onCallFinished({
-            duration: finalDuration,
-            cost: finalCost,
-            remainingCredits: remainingCredits - finalCreditsUsed,
-          })
+          console.error("Cannot update credits: No user ID available")
         }
       } catch (error) {
         console.error("Error processing call end:", error)
-        // Still call the callback with the result even if there was an error
-        onCallFinished({
-          duration: finalDuration,
-          cost: finalCost,
-          remainingCredits: remainingCredits - finalCreditsUsed,
-        })
+        // Still redirect even if there was an error
+        setTimeout(() => {
+          handleClose()
+        }, 2000)
       }
     } else {
-      console.log("Call duration was 0, not processing credits or history")
+      console.log("Call duration is 0, skipping credit update and history")
+      // Still redirect for zero-duration calls
+      setTimeout(() => {
+        handleClose()
+      }, 2000)
     }
 
     // Clean up the connection
@@ -606,6 +701,37 @@ export default function CallInterface({
     setErrorMessage("")
     setSetupAttempts(prev => prev + 1) // Trigger a retry
   }
+
+  // Initialize call timer when call becomes active
+  useEffect(() => {
+    let intervalId
+
+    if (callStatus === "active") {
+      intervalId = setInterval(() => {
+        setCallDuration(prev => {
+          const newDuration = prev + 1
+
+          // Calculate remaining credits
+          const cost = calculateCallCost(newDuration, callRate)
+          const newRemainingCredits = userCredits - cost
+          setRemainingCredits(newRemainingCredits)
+
+          // Auto-end call if credits run out
+          if (newRemainingCredits <= 0) {
+            handleHangUp()
+          }
+
+          return newDuration
+        })
+      }, 1000)
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [callStatus, userCredits, callRate])
 
   const handleKeypadPress = key => {
     // In development mode, just log the press
@@ -654,6 +780,53 @@ export default function CallInterface({
     setIsKeypadOpen(!isKeypadOpen)
   }
 
+  // Create a dedicated function for handling close button clicks
+  const handleClose = () => {
+    console.log("Close button clicked, current status:", callStatus)
+
+    // First disconnect any active call
+    if (connectionRef.current) {
+      try {
+        console.log("Disconnecting active call")
+        connectionRef.current.disconnect()
+      } catch (err) {
+        console.error("Error disconnecting call:", err)
+      }
+      connectionRef.current = null
+    }
+
+    // Clean up device if it exists
+    if (deviceRef.current) {
+      try {
+        console.log("Destroying Twilio device")
+        deviceRef.current.destroy()
+      } catch (err) {
+        console.error("Error destroying device:", err)
+      }
+      deviceRef.current = null
+    }
+
+    // Clear any active timers
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current)
+      callTimerRef.current = null
+    }
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    // Always call onClose if provided
+    if (onClose) {
+      console.log("Calling onClose callback")
+      // Use setTimeout to ensure all cleanup is done before calling onClose
+      setTimeout(() => {
+        onClose()
+      }, 100)
+    }
+  }
+
   // Conditionally render based on permission status
   if (permissionStatus === "denied") {
     return (
@@ -692,11 +865,18 @@ export default function CallInterface({
             {errorMessage ||
               "There was a problem with your call. Please try again later."}
           </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">
-            Try Again
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">
+              Try Again
+            </button>
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md">
+              Close
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -714,14 +894,14 @@ export default function CallInterface({
             ? "Calling..."
             : callStatus === "connecting"
             ? "Connecting..."
-            : callStatus === "disconnected"
+            : callStatus === "ended"
             ? "Call Ended"
             : callStatus === "error"
             ? "Call Error"
             : "Starting Call"}
         </h3>
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors">
           <X className="h-5 w-5" />
         </button>
@@ -738,7 +918,7 @@ export default function CallInterface({
         <div className="flex flex-col items-center justify-center mb-4">
           {callStatus === "initializing" && (
             <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600 mb-3"></div>
+              <div className="w-12 h-12 border-4 border-indigo-400 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
               <p className="text-gray-600 dark:text-gray-400">
                 Initializing call...
               </p>
@@ -790,7 +970,7 @@ export default function CallInterface({
             </div>
           )}
 
-          {callStatus === "disconnected" && (
+          {callStatus === "ended" && (
             <div className="flex flex-col items-center">
               <div
                 className={`p-3 rounded-full bg-rose-100 dark:bg-rose-900/50 mb-2 ${styles.callStatusGlowEffects.disconnected}`}>
@@ -874,9 +1054,7 @@ export default function CallInterface({
           </button>
         )}
 
-        {(callStatus === "connecting" ||
-          callStatus === "ringing" ||
-          callStatus === "connected") && (
+        {(callStatus === "connecting" || callStatus === "ringing") && (
           <button
             onClick={handleHangUp}
             className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium ${styles.callEndGradient} text-white w-full`}>
@@ -884,7 +1062,103 @@ export default function CallInterface({
             {callStatus === "connected" ? "End Call" : "Cancel"}
           </button>
         )}
+
+        {callStatus === "connected" && (
+          <>
+            <div className="grid grid-cols-3 gap-3 w-full">
+              {/* Mute button */}
+              <button
+                onClick={toggleMute}
+                className={`flex flex-col items-center justify-center p-3 rounded-lg ${
+                  isMuted
+                    ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                }`}>
+                {isMuted ? (
+                  <MicOff className="h-5 w-5 mb-1" />
+                ) : (
+                  <Mic className="h-5 w-5 mb-1" />
+                )}
+                <span className="text-xs">{isMuted ? "Unmute" : "Mute"}</span>
+              </button>
+
+              {/* End call button */}
+              <button
+                onClick={handleHangUp}
+                className={`flex flex-col items-center justify-center p-3 rounded-lg ${styles.callEndGradient} text-white`}>
+                <PhoneOff className="h-5 w-5 mb-1" />
+                <span className="text-xs">End</span>
+              </button>
+
+              {/* Keypad button */}
+              <button
+                onClick={toggleKeypad}
+                className={`flex flex-col items-center justify-center p-3 rounded-lg ${
+                  isKeypadOpen
+                    ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                }`}>
+                <KeypadIcon className="h-5 w-5 mb-1" />
+                <span className="text-xs">Keypad</span>
+              </button>
+
+              {/* Volume button */}
+              <button
+                onClick={toggleVolume}
+                className={`flex flex-col items-center justify-center p-3 rounded-lg ${
+                  isVolumeMuted
+                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                } col-span-3`}>
+                {isVolumeMuted ? (
+                  <VolumeX className="h-5 w-5 mb-1" />
+                ) : (
+                  <Volume2 className="h-5 w-5 mb-1" />
+                )}
+                <span className="text-xs">
+                  {isVolumeMuted ? "Unmute Speaker" : "Mute Speaker"}
+                </span>
+              </button>
+            </div>
+          </>
+        )}
+
+        {callStatus === "initializing" && (
+          <button
+            disabled
+            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium bg-gray-400 text-white w-full opacity-50 cursor-not-allowed`}>
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+            Preparing Call...
+          </button>
+        )}
+
+        {callStatus === "ended" && (
+          <button
+            onClick={handleClose}
+            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium bg-gray-600 hover:bg-gray-700 text-white w-full`}>
+            <X className="h-5 w-5" />
+            Back to Dashboard
+          </button>
+        )}
       </div>
+
+      {/* Keypad */}
+      {isKeypadOpen && callStatus === "connected" && (
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-3 gap-3">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map(
+              key => (
+                <button
+                  key={key}
+                  onClick={() => handleKeypadPress(key)}
+                  className="p-3 bg-white dark:bg-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 text-xl font-medium text-gray-800 dark:text-gray-200">
+                  {key}
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,26 +3,37 @@ const isClient = typeof window !== "undefined"
 
 // Load Twilio Voice SDK for client-side if needed
 let twilioClientSDK = null
+let twilioClientSDKLoaded = false
+let twilioClientSDKLoading = false
+
+// Function to load the Twilio Client SDK
+const loadTwilioClientSDK = async () => {
+  if (!isClient || twilioClientSDKLoaded || twilioClientSDKLoading) return
+
+  twilioClientSDKLoading = true
+  console.log("Loading Twilio Client SDK")
+
+  try {
+    const twilioModule = await import("twilio-client")
+    twilioClientSDK = twilioModule.default || twilioModule
+    twilioClientSDKLoaded = true
+    console.log("Twilio Client SDK loaded successfully")
+  } catch (err) {
+    console.error("Failed to load Twilio Client SDK:", err)
+    twilioClientSDKLoading = false
+  }
+}
+
+// Start loading the SDK if we're on the client side
 if (isClient) {
-  // Dynamic import for client-side only
-  console.log(
-    "🔍 [Twilio] Client-side detected, attempting to load Twilio Client SDK"
-  )
-  import("twilio-client")
-    .then(module => {
-      twilioClientSDK = module.default || module
-      console.log("✅ [Twilio] Client SDK loaded successfully")
-    })
-    .catch(err => {
-      console.error("❌ [Twilio] Failed to load Client SDK:", err)
-    })
+  loadTwilioClientSDK()
 }
 
 // Only import Twilio on the server side
 let twilioClient = null
 if (!isClient) {
   try {
-    console.log("🔍 [Twilio] Server-side detected, initializing Twilio client")
+    console.log("Server-side detected, initializing Twilio client")
     const twilio = require("twilio")
     const accountSid = process.env.TWILIO_ACCOUNT_SID
     const authToken = process.env.TWILIO_AUTH_TOKEN
@@ -30,30 +41,18 @@ if (!isClient) {
     if (accountSid && authToken) {
       twilioClient = twilio(accountSid, authToken)
       console.log(
-        "✅ [Twilio] Server client initialized with SID:",
+        "Server client initialized with SID:",
         accountSid?.substring(0, 8) + "..."
       )
     } else {
-      console.error("❌ [Twilio] Missing credentials for server client")
+      console.error("Missing credentials for server client")
     }
   } catch (error) {
-    console.error("❌ [Twilio] Server client initialization failed:", error)
+    console.error("Server client initialization failed:", error)
   }
 }
 
-// Development mode detection
-const isDevelopment =
-  process.env.NODE_ENV === "development" &&
-  process.env.NEXT_PUBLIC_TWILIO_ENABLED !== "true"
-
-console.log("🔍 [Twilio] Environment:", {
-  NODE_ENV: process.env.NODE_ENV,
-  TWILIO_ENABLED: process.env.NEXT_PUBLIC_TWILIO_ENABLED,
-  isDevelopment,
-})
-
 // Call pricing by country (example rates in credits per minute)
-// These would ideally be fetched from Twilio's API or a database
 export const CALL_RATES = {
   US: 1, // 1 credit per minute for US
   CA: 1, // 1 credit per minute for Canada
@@ -72,7 +71,7 @@ export const getCallRate = countryCode => {
 
 // Function to check browser media permissions
 export const checkMediaPermissions = async () => {
-  if (!isClient) return { hasPermission: false, error: "Server-side call" }
+  if (!isClient) return false
 
   try {
     // Request access to microphone
@@ -81,39 +80,20 @@ export const checkMediaPermissions = async () => {
     // If successful, clean up the stream
     stream.getTracks().forEach(track => track.stop())
 
-    return { hasPermission: true, error: null }
+    return true
   } catch (error) {
     console.error("Error requesting media permissions:", error)
-    return {
-      hasPermission: false,
-      error:
-        error.name === "NotAllowedError"
-          ? "Microphone access denied. Please allow microphone access in your browser settings."
-          : `Could not access microphone: ${error.message}`,
-    }
+    return false
   }
 }
 
 // Generate a Twilio capability token for browser-based calling
 export const generateToken = async identity => {
-  console.log(
-    `🔍 [Twilio] generateToken called for identity: ${identity}, isDevelopment: ${isDevelopment}`
-  )
+  console.log(`Generating token for identity: ${identity}`)
 
-  // For development, return a mock token
-  if (isDevelopment) {
-    console.log("[DEV] Generating mock token for:", identity)
-    return {
-      token: `mock-token-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 10)}`,
-      identity,
-    }
-  }
-
-  // In production, make API call to get token from server
+  // Make API call to get token from server
   try {
-    console.log("🔍 [Twilio] Making API call to get token from server")
+    console.log("Making API call to get token from server")
     const response = await fetch("/api/twilio/token", {
       method: "POST",
       headers: {
@@ -124,116 +104,106 @@ export const generateToken = async identity => {
 
     if (!response.ok) {
       console.error(
-        `❌ [Twilio] Token request failed: ${response.status} ${response.statusText}`
+        `Token request failed: ${response.status} ${response.statusText}`
       )
       const errorText = await response
         .text()
         .catch(e => "Could not read response")
-      console.error(`❌ [Twilio] Error response:`, errorText)
+      console.error(`Error response:`, errorText)
       throw new Error(`Token request failed: ${response.statusText}`)
     }
 
     const result = await response.json()
-    console.log("✅ [Twilio] Token received successfully", {
+    console.log("Token received successfully", {
       tokenLength: result.token?.length,
       identity: result.identity,
     })
     return result
   } catch (error) {
-    console.error("❌ [Twilio] Error requesting token:", error)
+    console.error("Error requesting token:", error)
     return { error: error.message }
   }
 }
 
 // Initialize browser client for making calls
 export const initializeTwilioDevice = async token => {
-  console.log(
-    `🔍 [Twilio] initializeTwilioDevice called, token length: ${token?.length}, isDevelopment: ${isDevelopment}`
-  )
-
-  if (isDevelopment) {
-    console.log("[DEV] Initializing mock Twilio device with token:", token)
-    return {
-      device: {
-        on: (event, callback) => {
-          console.log(`[DEV] Registered ${event} callback`)
-          if (event === "ready") setTimeout(callback, 500)
-        },
-        connect: params => {
-          console.log(`[DEV] Mock connecting with params:`, params)
-          return {
-            on: (event, callback) => {
-              console.log(`[DEV] Connection registered ${event} callback`)
-              if (event === "accept") setTimeout(callback, 1000)
-            },
-            disconnect: () => console.log("[DEV] Mock disconnected"),
-            sendDigits: digits =>
-              console.log(`[DEV] Sending digits: ${digits}`),
-            mute: shouldMute => console.log(`[DEV] Mute set to: ${shouldMute}`),
-          }
-        },
-        destroy: () => console.log("[DEV] Mock device destroyed"),
-      },
-      error: null,
-    }
-  }
+  console.log(`Initializing Twilio device with token length: ${token?.length}`)
 
   if (!isClient) {
-    console.error("❌ [Twilio] Cannot initialize device on server side")
+    console.error("Cannot initialize device on server side")
     return {
       device: null,
       error: "Cannot initialize Twilio device on server side",
     }
   }
 
+  // Ensure the Twilio Client SDK is loaded
+  if (!twilioClientSDKLoaded) {
+    try {
+      await loadTwilioClientSDK()
+
+      // If still not loaded after attempt, return error
+      if (!twilioClientSDKLoaded) {
+        console.error("Failed to load Twilio Client SDK")
+        return { device: null, error: "Twilio Client SDK could not be loaded" }
+      }
+    } catch (error) {
+      console.error("Error loading Twilio Client SDK:", error)
+      return { device: null, error: "Error loading Twilio Client SDK" }
+    }
+  }
+
   if (!twilioClientSDK) {
-    console.error("❌ [Twilio] Twilio Client SDK not loaded")
+    console.error("Twilio Client SDK not loaded")
     return { device: null, error: "Twilio Client SDK not available" }
   }
 
   try {
     // Check permissions first
-    console.log("🔍 [Twilio] Checking media permissions")
-    const { hasPermission, error: permissionError } =
-      await checkMediaPermissions()
+    console.log("Checking media permissions")
+    const hasPermission = await checkMediaPermissions()
 
     if (!hasPermission) {
-      console.error("❌ [Twilio] Permission denied:", permissionError)
-      return { device: null, error: permissionError }
+      console.error("Permission denied for microphone")
+      return { device: null, error: "Microphone permission denied" }
     }
 
-    console.log("✅ [Twilio] Media permissions granted")
+    console.log("Media permissions granted")
 
     // Initialize the device with the token
-    console.log("🔍 [Twilio] Creating new Device with token")
+    console.log("Creating new Device with token")
+
+    // Make sure twilioClientSDK is loaded and has the Device constructor
+    if (!twilioClientSDK.Device) {
+      console.error("Twilio Client SDK Device constructor not available")
+      return {
+        device: null,
+        error: "Twilio Client SDK Device constructor not available",
+      }
+    }
+
     const device = new twilioClientSDK.Device(token, {
       codecPreferences: ["opus", "pcmu"],
       fakeLocalDTMF: true,
       enableRingingState: true,
     })
-    console.log("✅ [Twilio] Device created successfully")
+
+    if (!device) {
+      console.error("Failed to create device instance")
+      return { device: null, error: "Failed to create device instance" }
+    }
+
+    console.log("Device created successfully")
 
     return { device, error: null }
   } catch (error) {
-    console.error("❌ [Twilio] Error initializing device:", error)
+    console.error("Error initializing device:", error)
     return { device: null, error: error.message }
   }
 }
 
 // Initiate a call from browser to phone number
 export const initiateCall = async (fromNumber, toNumber, callbackUrl) => {
-  // For development, return mock data
-  if (isDevelopment) {
-    console.log(`[DEV] Initiating mock call from ${fromNumber} to ${toNumber}`)
-    return {
-      callSid: `mock-call-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 10)}`,
-      status: "initiated",
-    }
-  }
-
-  // In production, call the API
   try {
     const response = await fetch("/api/twilio/call", {
       method: "POST",
@@ -260,21 +230,6 @@ export const initiateCall = async (fromNumber, toNumber, callbackUrl) => {
 
 // Get call status
 export const getCallStatus = async callSid => {
-  // For development, return mock data
-  if (isDevelopment) {
-    console.log(`[DEV] Getting mock status for call: ${callSid}`)
-    return {
-      status: "completed",
-      duration: 120, // 2 minutes
-      direction: "outbound-api",
-      from: "+18005551234",
-      to: "+18005556789",
-      startTime: new Date(Date.now() - 120000).toISOString(),
-      endTime: new Date().toISOString(),
-    }
-  }
-
-  // In production, call the API
   try {
     const response = await fetch(`/api/twilio/call-status?callSid=${callSid}`, {
       method: "GET",

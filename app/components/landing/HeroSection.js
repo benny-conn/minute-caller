@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { PhoneCall, Check, ArrowRight } from "lucide-react"
+import CountryRateCalculator from "@/app/components/CountryRateCalculator"
 
 // Custom styles
 const styles = {
@@ -17,8 +18,6 @@ const styles = {
 }
 
 export default function HeroSection() {
-  const [destinationInput, setDestinationInput] = useState("")
-
   return (
     <div
       className={`${styles.heroGradient} py-16 md:py-24 lg:py-32 overflow-hidden`}>
@@ -97,96 +96,17 @@ export default function HeroSection() {
                       <div className="bg-white/20 p-1.5 rounded-lg">
                         <PhoneCall className="h-5 w-5" />
                       </div>
-                      <h3 className="font-semibold">Call Simulator</h3>
+                      <h3 className="font-semibold">Call Rate Calculator</h3>
                     </div>
                     <div className="text-xs bg-white/20 px-2 py-1 rounded-full">
-                      Demo Mode
+                      Live Rates
                     </div>
                   </div>
                 </div>
 
                 {/* Call widget body */}
-                <div className="p-6">
-                  <div className="mb-6">
-                    <label
-                      htmlFor="destination"
-                      className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                      Enter a destination country
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="destination"
-                        type="text"
-                        value={destinationInput}
-                        onChange={e => setDestinationInput(e.target.value)}
-                        placeholder="e.g. United Kingdom, Germany, Japan"
-                        className="w-full p-3.5 pr-12 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 focus:border-indigo-500 transition-colors"
-                      />
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                        <div className="text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-300 px-2 py-1 rounded-full">
-                          DEMO
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            United Kingdom
-                          </div>
-                          <div className="font-medium text-gray-800 dark:text-gray-200">
-                            +44
-                          </div>
-                        </div>
-                        <div className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          1.2 credits/min
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            Germany
-                          </div>
-                          <div className="font-medium text-gray-800 dark:text-gray-200">
-                            +49
-                          </div>
-                        </div>
-                        <div className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          1.5 credits/min
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            Japan
-                          </div>
-                          <div className="font-medium text-gray-800 dark:text-gray-200">
-                            +81
-                          </div>
-                        </div>
-                        <div className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          2.0 credits/min
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex gap-3">
-                    <Link
-                      href="/pricing"
-                      className="text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:text-indigo-700 dark:hover:text-indigo-300">
-                      View all rates →
-                    </Link>
-                  </div>
+                <div className="p-0">
+                  <CountryRateCalculator maxResults={5} />
                 </div>
               </div>
             </div>

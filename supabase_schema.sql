@@ -81,4 +81,31 @@ BEGIN
     -- It's called by the updateUserCredits function when the table doesn't exist
     RAISE NOTICE 'Credits table already exists';
 END;
+$$;
+
+-- Function to create call_history table if it doesn't exist
+CREATE OR REPLACE FUNCTION public.create_call_history_table()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Create the call_history table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS public.call_history (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL,
+        phone_number TEXT NOT NULL,
+        duration INTEGER NOT NULL DEFAULT 0,
+        cost NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'completed',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+        metadata JSONB
+    );
+    
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS call_history_user_id_idx ON public.call_history (user_id);
+    CREATE INDEX IF NOT EXISTS call_history_created_at_idx ON public.call_history (created_at);
+    
+    RAISE NOTICE 'Call history table created successfully';
+END;
 $$; 
