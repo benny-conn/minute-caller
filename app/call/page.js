@@ -5,13 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PhoneCall } from "lucide-react"
 import {
-  getCurrentUser,
   getUserCredits,
   saveCallHistory,
   updateUserCredits,
+  createClient,
 } from "@/app/lib/supabase"
 import CallInterface from "@/app/components/call/CallInterface"
-import { supabase } from "@/app/lib/supabase"
 
 // Loading component to display while suspense is active
 function CallPageLoading() {
@@ -39,6 +38,7 @@ function CallPageContent() {
   const [error, setError] = useState("")
   const [callEnded, setCallEnded] = useState(false)
   const [callResult, setCallResult] = useState(null)
+  const [supabase] = useState(() => createClient())
 
   useEffect(() => {
     // Ensure we have a phone number
@@ -49,82 +49,117 @@ function CallPageContent() {
     }
 
     // Load user data
-    async function loadUserData() {
-      setIsLoading(true)
-      setError("")
+    loadUserData()
+  }, [phoneNumber])
+
+  // Load user data
+  async function loadUserData() {
+    setIsLoading(true)
+    setError("")
+
+    try {
+      console.log("[Call] Loading user data...")
+
+      // Check if we're already in a refresh cycle to prevent infinite loops
+      let shouldTryRefresh = false
 
       try {
-        // Get current user
-        const { user, error: userError } = await getCurrentUser()
-        let sessionData
+        const refreshAttemptKey = "call_refresh_attempt"
+        const refreshAttempt = sessionStorage.getItem(refreshAttemptKey)
+        const currentTime = Date.now()
 
-        if (userError) {
-          console.error("Error fetching user:", userError)
-          setError("Authentication error. Please sign in again.")
-          setIsLoading(false)
-          return
-        }
-
-        if (!user) {
-          console.error("No user found in getCurrentUser response")
-          // Instead of immediately redirecting, try to get the session directly
-          try {
-            const { data } = await supabase.auth.getSession()
-            sessionData = data
-            if (sessionData?.session?.user) {
-              // We have a session but getCurrentUser failed - use the session user
-              console.log("Using session user instead of getCurrentUser result")
-              setUser(sessionData.session.user)
-            } else {
-              // No session either, redirect to sign in
-              console.log("No session found, redirecting to sign in")
-              router.push(
-                "/auth/signin?next=" +
-                  encodeURIComponent("/call?number=" + phoneNumber)
-              )
-              return
-            }
-          } catch (sessionError) {
-            console.error("Error getting session:", sessionError)
-            // No session, redirect to sign in
-            router.push(
-              "/auth/signin?next=" +
-                encodeURIComponent("/call?number=" + phoneNumber)
-            )
-            return
-          }
+        // Only try to refresh if we haven't attempted recently (within last 10 seconds)
+        if (
+          !refreshAttempt ||
+          currentTime - parseInt(refreshAttempt, 10) > 10000
+        ) {
+          console.log("[Call] Will attempt session refresh")
+          sessionStorage.setItem(refreshAttemptKey, currentTime.toString())
+          shouldTryRefresh = true
         } else {
-          setUser(user)
+          console.log(
+            "[Call] Skipping session refresh - attempted too recently"
+          )
         }
-
-        // Get user credits - use the user from session if we didn't get one from getCurrentUser
-        const userId = user?.id || sessionData?.session?.user?.id
-        const { credits, error: creditsError } = await getUserCredits(userId)
-
-        if (creditsError) {
-          console.error("Error fetching credits:", creditsError)
-          // Don't fail, just log the error and use 0 credits
-        }
-
-        // Ensure we have a valid credits value
-        setCredits(credits || 100) // Use 100 as default in case of errors
-      } catch (error) {
-        console.error("Error loading user data:", error)
-        // Don't show errors in development mode
-        if (process.env.NODE_ENV !== "development") {
-          setError("An unexpected error occurred. Please try again.")
-        } else {
-          // In development mode, continue with mock data
-          setUser({ id: "dev-user-123", email: "dev@example.com" })
-          setCredits(100)
-        }
-      } finally {
-        setIsLoading(false)
+      } catch (storageErr) {
+        // If sessionStorage is not available, continue without throttling
+        console.log("[Call] Could not access sessionStorage:", storageErr)
+        shouldTryRefresh = true
       }
-    }
 
-    loadUserData()
-  }, [router, phoneNumber])
+      // First, try to refresh the session if appropriate
+      if (shouldTryRefresh) {
+        try {
+          console.log("[Call] Attempting to refresh session...")
+          const { data: refreshData, error: refreshError } =
+            await supabase.auth.refreshSession()
+
+          if (!refreshError) {
+            console.log(
+              "[Call] Session refreshed successfully:",
+              refreshData.session?.user?.email
+            )
+          } else {
+            console.log("[Call] Session refresh failed:", refreshError.message)
+          }
+        } catch (refreshErr) {
+          console.error("[Call] Error refreshing session:", refreshErr)
+        }
+      }
+
+      // Get current user using getUser directly from Supabase
+      console.log("[Call] Getting user with supabase.auth.getUser()...")
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+
+      if (userError || !userData?.user) {
+        console.error(
+          "[Call] Authentication failed:",
+          userError?.message || "No user found"
+        )
+        setError("Authentication error. Please sign in again.")
+
+        // Add a small delay before redirecting to prevent immediate redirect loops
+        setTimeout(() => {
+          router.push(
+            `/auth/signin?next=${encodeURIComponent(
+              "/call?number=" + phoneNumber
+            )}`
+          )
+        }, 1000)
+
+        setIsLoading(false)
+        return
+      }
+
+      // Set the authenticated user
+      const user = userData.user
+      console.log("[Call] User authenticated successfully:", user.email)
+      setUser(user)
+
+      // Get user credits
+      const { credits, error: creditsError } = await getUserCredits(user.id)
+
+      if (creditsError) {
+        console.error("Error fetching credits:", creditsError)
+        // Don't fail, just log the error and use 0 credits
+      }
+
+      // Ensure we have a valid credits value
+      setCredits(credits || 100) // Use 100 as default in case of errors
+    } catch (error) {
+      console.error("Error loading user data:", error)
+      // Don't show errors in development mode
+      if (process.env.NODE_ENV !== "development") {
+        setError("An unexpected error occurred. Please try again.")
+      } else {
+        // In development mode, continue with mock data
+        setUser({ id: "dev-user-123", email: "dev@example.com" })
+        setCredits(100)
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleHangUp = () => {
     // This would be handled by the CallInterface component
